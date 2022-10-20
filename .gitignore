@@ -1,0 +1,6 @@
+.git
+.vs/
+bin/
+obj/
+credentials.json
+Google.Apis.Auth.OAuth2.Responses.TokenResponse-contact.*
