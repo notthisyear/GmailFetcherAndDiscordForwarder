@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Linq;
+using System.Net.Mail;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using CommandLine;
@@ -36,9 +37,9 @@ namespace GoogleMailFetcher
                 Environment.Exit(1);
             }
 
-            if (string.IsNullOrEmpty(args.AccountName))
+            if (string.IsNullOrEmpty(args.EmailAddress) || !MailAddress.TryCreate(args.EmailAddress, out _))
             {
-                LoggerType.Internal.Log(LoggingLevel.Error, "ERROR: Account name cannot be empty");
+                LoggerType.Internal.Log(LoggingLevel.Error, "ERROR: Given mail address could not be parsed as valid address");
                 Environment.Exit(1);
             }
             var tcs = new TaskCompletionSource();

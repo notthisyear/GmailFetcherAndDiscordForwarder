@@ -8,7 +8,7 @@ namespace GoogleMailFetcher.Common
         [Option(longName: "credentials-path", shortName: 'c', Required = true, HelpText = "Path to the credentials file")]
         public string? CredentialsPath { get; set; }
 
-        [Option(longName: "account-name", shortName: 'a', Required = true, HelpText = "The name of the Google account")]
-        public string? AccountName { get; set; }
+        [Option(longName: "email-address", shortName: 'e', Required = true, HelpText = "The Google email address to target")]
+        public string? EmailAddress { get; set; }
     }
 }

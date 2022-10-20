@@ -13,15 +13,7 @@
     <PackageReference Include="NLog" Version="5.0.4" />
   </ItemGroup>
 
-  <ItemGroup>
-    <EditorConfigFiles Remove="C:\Users\carl.lindquist\source\repos\GoogleMailFetcher\.editorconfig" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Include="C:\Users\carl.lindquist\source\repos\GoogleMailFetcher\.editorconfig" />
-  </ItemGroup>
-
-  <ItemGroup>
+    <ItemGroup>
     <None Update="NLog.config">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
