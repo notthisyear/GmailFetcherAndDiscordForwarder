@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using NLog;
 
-namespace GoogleMailFetcher.Common
+namespace GmailFetcherAndForwarder.Common
 {
     internal enum LoggingLevel
     {

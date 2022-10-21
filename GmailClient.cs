@@ -9,9 +9,9 @@ using Google.Apis.Gmail.v1;
 using Google.Apis.Services;
 using Google.Apis.Util.Store;
 using Google.Apis.Gmail.v1.Data;
-using GoogleMailFetcher.Common;
+using GmailFetcherAndForwarder.Common;
 
-namespace GoogleMailFetcher
+namespace GmailFetcherAndForwarder
 {
     internal class GmailClient : IDisposable
     {

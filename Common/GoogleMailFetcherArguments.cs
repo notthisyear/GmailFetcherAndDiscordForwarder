@@ -1,6 +1,6 @@
 ﻿using CommandLine;
 
-namespace GoogleMailFetcher.Common
+namespace GmailFetcherAndForwarder.Common
 {
     internal class GoogleMailFetcherArguments
     {

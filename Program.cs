@@ -6,9 +6,9 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 using CommandLine;
 using CommandLine.Text;
-using GoogleMailFetcher.Common;
+using GmailFetcherAndForwarder.Common;
 
-namespace GoogleMailFetcher
+namespace GmailFetcherAndForwarder
 {
     public class Program
     {

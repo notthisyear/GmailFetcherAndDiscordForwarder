@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Threading.Tasks;
 using System.Collections.Generic;
-using GoogleMailFetcher.Common;
+using GmailFetcherAndForwarder.Common;
 
-namespace GoogleMailFetcher
+namespace GmailFetcherAndForwarder
 {
     internal class EntryPoint
     {
