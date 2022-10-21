@@ -1,9 +1,9 @@
 ﻿using System;
 using System.IO;
 using System.Linq;
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Collections.Generic;
 using Google.Apis.Auth.OAuth2;
 using Google.Apis.Gmail.v1;
 using Google.Apis.Services;
@@ -13,10 +13,13 @@ using GoogleMailFetcher.Common;
 
 namespace GoogleMailFetcher
 {
-    internal class GmailClient
+    internal class GmailClient : IDisposable
     {
         #region Private fields
         private const string InboxLabelId = "INBOX";
+        private const string SentLabelId = "SENT";
+
+        private const string MessageIdHeaderPartName = "Message-ID";
         private const string DateHeaderPartName = "Date";
         private const string FromHeaderPartName = "From";
         private const string SubjectHeaderPartName = "Subject";
@@ -29,6 +32,7 @@ namespace GoogleMailFetcher
         private readonly string _credentialsPath;
 
         private GmailService? _mailService;
+        private bool _disposedValue;
         #endregion
 
         public GmailClient(string accountName, string emailAddress, string credentialsPath)
@@ -38,6 +42,7 @@ namespace GoogleMailFetcher
             _credentialsPath = credentialsPath;
         }
 
+        #region Public methods
         public async Task Initialize(string serviceName)
         {
             var localFileStorePath = Path.GetDirectoryName(_credentialsPath);
@@ -57,6 +62,82 @@ namespace GoogleMailFetcher
         }
 
         public async Task<(List<string>? ids, Exception? e)> TryGetAllEmailIdsInInbox()
+            => await TryGetAllEmailsWithLabel(InboxLabelId);
+
+        public async Task<(List<string>? ids, Exception? e)> TryGetAllSentEmails()
+            => await TryGetAllEmailsWithLabel(SentLabelId);
+
+        public async Task<(GmailEmail? email, Exception? e)> TryGetEmailFromId(string emailId, bool showProgress = false)
+        {
+            (List<GmailEmail>? emails, Exception? e) = await TryGetEmailsFromIds(new List<string> { emailId }, showProgress);
+            return (emails == null ? default : emails.First(), e);
+        }
+
+        public async Task<(List<GmailEmail>? emails, Exception? e)> TryGetEmailsFromIds(List<string> emailIds, bool showProgress = false)
+        {
+            if (_mailService == default)
+                return (default, new InvalidOperationException("Mail client not initialized"));
+
+            if (!emailIds.Any())
+                return (new List<GmailEmail>(), default);
+
+            try
+            {
+                List<GmailEmail> result = new();
+                int i = 1;
+                foreach (var id in emailIds)
+                {
+                    if (showProgress)
+                        WriteStringToCurrentLine($"[{i++}/{emailIds.Count}] Fetching data for e-mail '{id}'...");
+
+                    var emailInfoRequest = _mailService.Users.Messages.Get(_emailAddress, id);
+                    var emailInfoResponse = await emailInfoRequest.ExecuteAsync();
+
+                    if (emailInfoResponse != null)
+                    {
+                        var date = emailInfoResponse.Payload.Headers.FirstOrDefault(x => x.Name.Equals(DateHeaderPartName, StringComparison.OrdinalIgnoreCase))?.Value;
+                        var messageId = emailInfoResponse.Payload.Headers.FirstOrDefault(x => x.Name.Equals(MessageIdHeaderPartName, StringComparison.OrdinalIgnoreCase))?.Value;
+                        var from = emailInfoResponse.Payload.Headers.FirstOrDefault(x => x.Name.Equals(FromHeaderPartName, StringComparison.OrdinalIgnoreCase))?.Value;
+                        var subject = emailInfoResponse.Payload.Headers.FirstOrDefault(x => x.Name.Equals(SubjectHeaderPartName, StringComparison.OrdinalIgnoreCase))?.Value;
+                        var returnPath = emailInfoResponse.Payload.Headers.FirstOrDefault(x => x.Name.Equals(ReturnPathHeaderPartName, StringComparison.OrdinalIgnoreCase))?.Value;
+                        var references = emailInfoResponse.Payload.Headers.FirstOrDefault(x => x.Name.Equals(ReferencesHeaderPartName, StringComparison.OrdinalIgnoreCase))?.Value;
+                        var inReplyTo = emailInfoResponse.Payload.Headers.FirstOrDefault(x => x.Name.Equals(InReplyToHeaderPartName, StringComparison.OrdinalIgnoreCase))?.Value;
+
+                        var bodyRaw = string.Empty;
+                        if (!string.IsNullOrEmpty(date) && !string.IsNullOrEmpty(from))
+                        {
+                            if (emailInfoResponse.Payload.Parts == null && emailInfoResponse.Payload.Body != null)
+                                bodyRaw = emailInfoResponse.Payload.Body.Data;
+                            else
+                                bodyRaw = ExtractBodyByParts(emailInfoResponse.Payload.Parts);
+                        }
+
+                        result.Add(string.IsNullOrEmpty(bodyRaw) ?
+                            GmailEmail.ConstructEmpty() : GmailEmail.Construct(id, from, date, messageId, subject, returnPath, references, inReplyTo, bodyRaw));
+                    }
+                    else
+                    {
+                        if (showProgress)
+                            WriteStringToCurrentLine("");
+
+                        return (default, new InvalidGmailResponseException($"Response for mail ID {id} was null"));
+                    }
+
+                    if (showProgress)
+                        WriteStringToCurrentLine("");
+                }
+
+                return (result, default);
+            }
+            catch (Exception e)
+            {
+                return (default, new GmailCommunicationException("Email fetching failed", e));
+            }
+        }
+        #endregion
+
+        #region Private methods
+        private async Task<(List<string>? ids, Exception? e)> TryGetAllEmailsWithLabel(string label)
         {
             if (_mailService == default)
                 return (default, new InvalidOperationException("Mail client not initialized"));
@@ -68,7 +149,7 @@ namespace GoogleMailFetcher
                 do
                 {
                     var emailListRequest = _mailService.Users.Messages.List(_emailAddress);
-                    emailListRequest.LabelIds = InboxLabelId;
+                    emailListRequest.LabelIds = label;
                     emailListRequest.IncludeSpamTrash = false;
                     if (!string.IsNullOrEmpty(pageToken))
                         emailListRequest.PageToken = pageToken;
@@ -89,57 +170,7 @@ namespace GoogleMailFetcher
             {
                 return (default, new GmailCommunicationException("Email listing failed", e));
             }
-        }
 
-        public async Task<(List<GoogleEmail>? emails, Exception? e)> TryGetAllEmailsFromIds(List<string> emailIds)
-        {
-            if (_mailService == default)
-                return (default, new InvalidOperationException("Mail client not initialized"));
-
-            if (!emailIds.Any())
-                return (new List<GoogleEmail>(), default);
-
-            try
-            {
-                List<GoogleEmail> result = new();
-                foreach (var id in emailIds)
-                {
-                    var emailInfoRequest = _mailService.Users.Messages.Get(_emailAddress, id);
-                    var emailInfoResponse = await emailInfoRequest.ExecuteAsync();
-
-                    if (emailInfoResponse != null)
-                    {
-                        var date = emailInfoResponse.Payload.Headers.FirstOrDefault(x => x.Name.Equals(DateHeaderPartName, StringComparison.OrdinalIgnoreCase))?.Value;
-                        var from = emailInfoResponse.Payload.Headers.FirstOrDefault(x => x.Name.Equals(FromHeaderPartName, StringComparison.OrdinalIgnoreCase))?.Value;
-                        var subject = emailInfoResponse.Payload.Headers.FirstOrDefault(x => x.Name.Equals(SubjectHeaderPartName, StringComparison.OrdinalIgnoreCase))?.Value;
-                        var returnPath = emailInfoResponse.Payload.Headers.FirstOrDefault(x => x.Name.Equals(ReturnPathHeaderPartName, StringComparison.OrdinalIgnoreCase))?.Value;
-                        var references = emailInfoResponse.Payload.Headers.FirstOrDefault(x => x.Name.Equals(ReferencesHeaderPartName, StringComparison.OrdinalIgnoreCase))?.Value;
-                        var inReplyTo = emailInfoResponse.Payload.Headers.FirstOrDefault(x => x.Name.Equals(InReplyToHeaderPartName, StringComparison.OrdinalIgnoreCase))?.Value;
-
-                        var bodyRaw = string.Empty;
-                        if (!string.IsNullOrEmpty(date) && !string.IsNullOrEmpty(from))
-                        {
-                            if (emailInfoResponse.Payload.Parts == null && emailInfoResponse.Payload.Body != null)
-                                bodyRaw = emailInfoResponse.Payload.Body.Data;
-                            else
-                                bodyRaw = ExtractBodyByParts(emailInfoResponse.Payload.Parts);
-                        }
-
-                        result.Add(string.IsNullOrEmpty(bodyRaw) ?
-                            GoogleEmail.ConstructEmpty() : GoogleEmail.Construct(id, from, date, subject, returnPath, references, inReplyTo, bodyRaw));
-                    }
-                    else
-                    {
-                        return (default, new InvalidGmailResponseException($"Response for mail ID {id} was null"));
-                    }
-                }
-
-                return (result, default);
-            }
-            catch (Exception e)
-            {
-                return (default, new GmailCommunicationException("Email fetching failed", e));
-            }
         }
 
         private static string ExtractBodyByParts(IList<MessagePart>? part, string currentBody = "")
@@ -168,5 +199,43 @@ namespace GoogleMailFetcher
                 return newBody;
             }
         }
+
+        private static void WriteStringToCurrentLine(string s)
+        {
+            try
+            {
+                (int left, int top) = Console.GetCursorPosition();
+                Console.SetCursorPosition(0, top);
+                if (left > 0)
+                {
+                    Console.Write(new string(' ', left));
+                    Console.SetCursorPosition(0, top);
+                }
+                Console.Write(s);
+            }
+            catch (IOException) { }
+        }
+        #endregion
+
+        #region Disposal
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposedValue)
+            {
+                if (disposing)
+                {
+                    if (_mailService != default)
+                        _mailService.Dispose();
+                }
+                _disposedValue = true;
+            }
+        }
+
+        public void Dispose()
+        {
+            Dispose(disposing: true);
+            GC.SuppressFinalize(this);
+        }
+        #endregion
     }
 }

@@ -2,15 +2,18 @@
 using System.Text;
 using System.Globalization;
 using System.Collections.Generic;
+using Google.Apis.Gmail.v1.Data;
 
 namespace GoogleMailFetcher
 {
-    internal record GoogleEmail
+    internal record GmailEmail
     {
         #region Public methods
         public bool IsValid { get; }
 
         public string MailId { get; }
+
+        public string MessageId { get; }
 
         public string From { get; }
 
@@ -27,7 +30,7 @@ namespace GoogleMailFetcher
         public string? InReplyTo { get; }
         #endregion
 
-        private GoogleEmail()
+        private GmailEmail()
         {
             IsValid = false;
             From = string.Empty;
@@ -36,12 +39,14 @@ namespace GoogleMailFetcher
             Date = DateTime.MinValue;
             Content = string.Empty;
             MailId = string.Empty;
+            MessageId = string.Empty;
         }
 
-        private GoogleEmail(string mailId, string from, string returnPath, string subject, DateTime dateTime, string content, string? references, string? inReplyTo)
+        private GmailEmail(string mailId, string messageId, string from, string returnPath, string subject, DateTime dateTime, string content, string? references, string? inReplyTo)
         {
             IsValid = true;
             MailId = mailId;
+            MessageId = messageId;
             From = from;
             ReturnPath = returnPath;
             Subject = subject;
@@ -51,10 +56,10 @@ namespace GoogleMailFetcher
             InReplyTo = inReplyTo;
         }
 
-        public static GoogleEmail ConstructEmpty()
+        public static GmailEmail ConstructEmpty()
             => new();
 
-        public static GoogleEmail Construct(string id, string? from, string? date, string? subject, string? returnPath, string? references, string? inReplyTo, string bodyRaw)
+        public static GmailEmail Construct(string id, string? from, string? date, string? messageId, string? subject, string? returnPath, string? references, string? inReplyTo, string bodyRaw)
         {
             if (string.IsNullOrEmpty(from))
                 return new();
@@ -63,6 +68,9 @@ namespace GoogleMailFetcher
                 return new();
 
             if (string.IsNullOrEmpty(date))
+                return new();
+
+            if (string.IsNullOrEmpty(messageId))
                 return new();
 
             if (string.IsNullOrEmpty(returnPath))
@@ -74,7 +82,7 @@ namespace GoogleMailFetcher
             if (!TryDecodeBody(bodyRaw, out string body))
                 return new();
 
-            return new GoogleEmail(id, from, returnPath, subject, d, body, references, inReplyTo);
+            return new GmailEmail(id, messageId, from, returnPath, subject, d, body, references, inReplyTo);
         }
 
         #region Private methods
