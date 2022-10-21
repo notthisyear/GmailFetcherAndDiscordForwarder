@@ -2,7 +2,6 @@
 using System.Text;
 using System.Globalization;
 using System.Collections.Generic;
-using Google.Apis.Gmail.v1.Data;
 
 namespace GmailFetcherAndForwarder
 {
@@ -17,13 +16,13 @@ namespace GmailFetcherAndForwarder
 
         public string From { get; }
 
-        public string ReturnPath { get; }
-
         public string Subject { get; }
 
         public DateTime Date { get; }
 
         public string Content { get; }
+
+        public string? ReturnPath { get; }
 
         public string? References { get; }
 
@@ -42,16 +41,16 @@ namespace GmailFetcherAndForwarder
             MessageId = string.Empty;
         }
 
-        private GmailEmail(string mailId, string messageId, string from, string returnPath, string subject, DateTime dateTime, string content, string? references, string? inReplyTo)
+        private GmailEmail(string mailId, string messageId, string from, string subject, DateTime dateTime, string content, string? returnPath, string? references, string? inReplyTo)
         {
             IsValid = true;
             MailId = mailId;
             MessageId = messageId;
             From = from;
-            ReturnPath = returnPath;
             Subject = subject;
             Date = dateTime;
             Content = content;
+            ReturnPath = returnPath;
             References = references;
             InReplyTo = inReplyTo;
         }
@@ -73,16 +72,13 @@ namespace GmailFetcherAndForwarder
             if (string.IsNullOrEmpty(messageId))
                 return new();
 
-            if (string.IsNullOrEmpty(returnPath))
-                return new();
-
             if (!DateTime.TryParse(date, CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime d))
                 return new();
 
             if (!TryDecodeBody(bodyRaw, out string body))
                 return new();
 
-            return new GmailEmail(id, messageId, from, returnPath, subject, d, body, references, inReplyTo);
+            return new GmailEmail(id, messageId, from, subject, d, body, returnPath, references, inReplyTo);
         }
 
         #region Private methods

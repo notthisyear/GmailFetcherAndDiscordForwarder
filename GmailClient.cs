@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
+using NLog;
 using Google.Apis.Auth.OAuth2;
 using Google.Apis.Gmail.v1;
 using Google.Apis.Services;
@@ -85,6 +86,10 @@ namespace GmailFetcherAndForwarder
             {
                 List<GmailEmail> result = new();
                 int i = 1;
+
+                if (showProgress)
+                    LogManager.Flush();
+
                 foreach (var id in emailIds)
                 {
                     if (showProgress)
@@ -120,12 +125,12 @@ namespace GmailFetcherAndForwarder
                         if (showProgress)
                             WriteStringToCurrentLine("");
 
-                        return (default, new InvalidGmailResponseException($"Response for mail ID {id} was null"));
+                        return (default, new InvalidGmailResponseException($"Response for mail ID '{id}' was null"));
                     }
-
-                    if (showProgress)
-                        WriteStringToCurrentLine("");
                 }
+
+                if (showProgress)
+                    WriteStringToCurrentLine("");
 
                 return (result, default);
             }

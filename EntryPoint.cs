@@ -7,7 +7,7 @@ namespace GmailFetcherAndForwarder
 {
     internal class EntryPoint
     {
-        private const string ServiceName = "GoogleMailFetcher";
+        private const string ServiceName = "GmailFetcherAndForwarder";
 
         public static async Task StartProgram(GoogleMailFetcherArguments arguments)
         {
@@ -32,7 +32,8 @@ namespace GmailFetcherAndForwarder
 
         private static async Task<(bool success, List<GmailEmail>? received, List<GmailEmail>? sent)> TryGetAllReceivedAndSentEmails(GmailClient mailClient)
         {
-            (bool success, List<string>? receivedEmailsIds) = await TryGetReceivedEmailIds(mailClient);
+            bool success;
+            (success, List<string>? receivedEmailsIds) = await TryGetReceivedEmailIds(mailClient);
             if (!success)
                 return (false, default, default);
 
@@ -58,7 +59,6 @@ namespace GmailFetcherAndForwarder
             }
 
             return (true, receivedEmails, sentEmails);
-
         }
 
         private static async Task<(bool success, List<string>? ids)> TryGetReceivedEmailIds(GmailClient mailClient)
