@@ -5,10 +5,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using NLog;
-using Google.Apis.Auth.OAuth2;
 using Google.Apis.Gmail.v1;
 using Google.Apis.Services;
 using Google.Apis.Util.Store;
+using Google.Apis.Auth.OAuth2;
 using Google.Apis.Gmail.v1.Data;
 using GmailFetcherAndForwarder.Common;
 
@@ -62,19 +62,75 @@ namespace GmailFetcherAndForwarder.Gmail
             });
         }
 
-        public async Task<(List<string>? ids, Exception? e)> TryGetAllReceivedEmails()
-            => await TryGetAllEmailsWithLabel(InboxLabelId);
+        public async Task<List<GmailEmail>> GetAllNewEmails(List<string> existingReceivedEmailIds, List<string> existingSentEmailIds)
+            => await GetAllNewEmails(existingReceivedEmailIds, existingSentEmailIds, CancellationToken.None);
 
-        public async Task<(List<string>? ids, Exception? e)> TryGetAllSentEmails()
-            => await TryGetAllEmailsWithLabel(SentLabelId);
-
-        public async Task<(GmailEmail? email, Exception? e)> TryGetEmailFromId(MailType type, string emailId, bool showProgress = false)
+        public async Task<List<GmailEmail>> GetAllNewEmails(List<string> existingReceivedEmailIds, List<string> existingSentEmailIds, CancellationToken ct)
         {
-            (List<GmailEmail>? emails, Exception? e) = await TryGetEmailsFromIds(type, new List<string> { emailId }, showProgress);
-            return (emails == null ? default : emails.First(), e);
+            List<string> newReceivedIds = await CheckForNewEmails(MailType.Received, existingReceivedEmailIds, ct);
+            List<string> newSentIds = await CheckForNewEmails(MailType.Sent, existingSentEmailIds, ct);
+
+            List<GmailEmail> newEmails = new();
+            if (newReceivedIds.Any())
+            {
+                LoggerType.GoogleCommunication.Log(LoggingLevel.Info, $"Found {newReceivedIds!.Count} new '{MailType.Received.AsString()}' {(newReceivedIds.Count == 1 ? "e-mail" : "e-mails")}, fetching content...");
+                (List<GmailEmail>? newReceivedEmails, Exception? e) = await TryGetEmailsFromIds(MailType.Received, newReceivedIds, showProgress: true);
+
+                if (e != default)
+                    LoggerType.GoogleCommunication.Log(LoggingLevel.Error, e, $"Could not get new {MailType.Received.AsString()} e-mail content");
+                else
+                    newReceivedEmails?.ForEach(x => newEmails.Add(x));
+            }
+
+            if (newSentIds.Any())
+            {
+                LoggerType.GoogleCommunication.Log(LoggingLevel.Info, $"Found {newSentIds!.Count} new '{MailType.Sent.AsString()}' {(newSentIds.Count == 1 ? "e-mail" : "e-mails")}, fetching content...");
+                (List<GmailEmail>? newSentEmails, Exception? e) = await TryGetEmailsFromIds(MailType.Sent, newSentIds, showProgress: true);
+
+                if (e != default)
+                    LoggerType.GoogleCommunication.Log(LoggingLevel.Error, e, $"Could not get new {MailType.Sent.AsString()} e-mail content");
+                else
+                    newSentEmails?.ForEach(x => newEmails.Add(x));
+            }
+
+            return newEmails;
+
+        }
+        #endregion
+
+        #region Private methods
+        private async Task<List<string>> CheckForNewEmails(MailType type, IEnumerable<string> existingEmailIds, CancellationToken ct)
+        {
+            (List<string>? allEmailsIds, Exception? e) = type switch
+            {
+                MailType.Sent => await TryGetAllSentEmails(ct),
+                MailType.Received => await TryGetAllReceivedEmails(ct),
+                _ => throw new NotImplementedException(),
+            };
+
+            if (e != default)
+            {
+                if (!ct.IsCancellationRequested)
+                    LoggerType.GoogleCommunication.Log(LoggingLevel.Error, e);
+                return new();
+            }
+
+            List<string> newEmailIds = new();
+            foreach (string id in allEmailsIds!)
+            {
+                if (!existingEmailIds.Where(x => x.Equals(id, StringComparison.Ordinal)).Any())
+                    newEmailIds.Add(id);
+            }
+            return newEmailIds;
         }
 
-        public async Task<(List<GmailEmail>? emails, Exception? e)> TryGetEmailsFromIds(MailType type, List<string> emailIds, bool showProgress = false)
+        private async Task<(List<string>? ids, Exception? e)> TryGetAllReceivedEmails(CancellationToken ct)
+            => await TryGetAllEmailsWithLabel(InboxLabelId, ct);
+
+        private async Task<(List<string>? ids, Exception? e)> TryGetAllSentEmails(CancellationToken ct)
+            => await TryGetAllEmailsWithLabel(SentLabelId, ct);
+
+        private async Task<(List<GmailEmail>? emails, Exception? e)> TryGetEmailsFromIds(MailType type, List<string> emailIds, bool showProgress = false)
         {
             if (_mailService == default)
                 return (default, new InvalidOperationException("Mail client not initialized"));
@@ -139,10 +195,8 @@ namespace GmailFetcherAndForwarder.Gmail
                 return (default, new GmailCommunicationException("Email fetching failed", e));
             }
         }
-        #endregion
 
-        #region Private methods
-        private async Task<(List<string>? ids, Exception? e)> TryGetAllEmailsWithLabel(string label)
+        private async Task<(List<string>? ids, Exception? e)> TryGetAllEmailsWithLabel(string label, CancellationToken ct)
         {
             if (_mailService == default)
                 return (default, new InvalidOperationException("Mail client not initialized"));
@@ -159,7 +213,16 @@ namespace GmailFetcherAndForwarder.Gmail
                     if (!string.IsNullOrEmpty(pageToken))
                         emailListRequest.PageToken = pageToken;
 
-                    var emailListResponse = await emailListRequest.ExecuteAsync();
+                    ListMessagesResponse? emailListResponse;
+                    try
+                    {
+                        emailListResponse = await emailListRequest.ExecuteAsync(ct);
+                    }
+                    catch (TaskCanceledException e)
+                    {
+                        return (default, e);
+                    }
+
                     if (emailListResponse == null || emailListResponse.Messages == null)
                         return (default, new InvalidGmailResponseException("Email listing return null"));
 

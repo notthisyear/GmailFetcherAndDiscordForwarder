@@ -5,6 +5,8 @@ namespace GmailFetcherAndForwarder.Gmail
 {
     internal class GmailThread
     {
+        public int Count => _thread.Count;
+
         private readonly List<GmailEmail> _thread;
 
         public GmailThread(GmailEmail root, List<GmailEmail> thread)
@@ -17,6 +19,11 @@ namespace GmailFetcherAndForwarder.Gmail
         public void AddLeaf(GmailEmail email)
         {
             _thread.Add(email);
+        }
+
+        public void Clear()
+        {
+            _thread.Clear();
         }
 
         public string CurrentLeafId => _thread.Any() ? _thread.Last().MessageId : string.Empty;

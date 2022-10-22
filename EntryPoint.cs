@@ -1,23 +1,17 @@
 ﻿using System;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
-using System.Collections.Generic;
-using Newtonsoft.Json;
 using GmailFetcherAndForwarder.Common;
 using GmailFetcherAndForwarder.Gmail;
-using Newtonsoft.Json.Serialization;
 
 namespace GmailFetcherAndForwarder
 {
     internal class EntryPoint
     {
         private const string ServiceName = "GmailFetcherAndForwarder";
-        private static readonly JsonSerializerSettings s_serializerSettings = new()
-        {
-            ContractResolver = new DefaultContractResolver { NamingStrategy = new SnakeCaseNamingStrategy() },
-            Formatting = Formatting.Indented
-        };
+        private static readonly CancellationTokenSource s_cts = new();
 
         public static async Task StartProgram(GoogleMailFetcherArguments arguments)
         {
@@ -32,152 +26,94 @@ namespace GmailFetcherAndForwarder
             LoggerType.Internal.Log(LoggingLevel.Info, "Initializing Gmail service...");
             await mailClient.Initialize(ServiceName);
 
-            List<GmailEmail> emails = await TryGetAllEmails(arguments.EmailsCachePath, mailClient);
-            if (!FlushEmailsToCache(emails, arguments.EmailsCachePath!))
-                LoggerType.Internal.Log(LoggingLevel.Warning, "Flushing to cache failed");
+            if (string.IsNullOrEmpty(arguments.EmailsCachePath))
+                arguments.EmailsCachePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "email_cache.json");
+
+            LoggerType.Internal.Log(LoggingLevel.Info, "Initializing cache manager...");
+            var cacheManager = new CacheManager(arguments.EmailsCachePath);
+            await PopulateEmailCacheManager(cacheManager, mailClient);
+            cacheManager.FlushEmailCacheToDisk();
 
             LoggerType.Internal.Log(LoggingLevel.Info, "Initializing mail manager...");
-            var mailManager = new GmailMailManager();
-            mailManager.Initialize(emails);
+            using var mailManager = new GmailMailManager();
+            mailManager.Initialize(cacheManager.Emails);
 
-            Console.ReadLine();
-            return;
+            TaskCompletionSource tcs = new();
+            Console.CancelKeyPress += ApplicationClosing;
+
+            _ = Task.Run(async () =>
+            {
+                await MonitorServer(1000, mailClient, cacheManager, mailManager, s_cts.Token);
+                tcs.SetResult();
+            });
+
+            await tcs.Task;
+
+            cacheManager.Clear();
+            s_cts.Dispose();
+
+            LoggerType.Internal.Log(LoggingLevel.Info, "Application closing");
         }
 
-        private static async Task<List<GmailEmail>> TryGetAllEmails(string? emailCachePath, GmailClient mailClient)
+        private static async Task MonitorServer(int fetchingIntervalMs, GmailClient mailClient, CacheManager cacheManager, GmailMailManager mailManager, CancellationToken ct)
         {
-            List<GmailEmail>? emailsOrNull = default;
-            if (!string.IsNullOrEmpty(emailCachePath))
+            while (true)
             {
-                LoggerType.Internal.Log(LoggingLevel.Info, $"Reading e-mail cache...");
-                if (TryReadEmailListFromFile(emailCachePath!, out emailsOrNull))
-                    LoggerType.Internal.Log(LoggingLevel.Info, $"Read {emailsOrNull!.Count} e-mails from cache");
-            }
-            else
-            {
-                LoggerType.Internal.Log(LoggingLevel.Info, $"No e-mail cache available");
-            }
+                var nextServerFetch = DateTime.Now.AddMilliseconds(fetchingIntervalMs);
+                LoggerType.Internal.Log(LoggingLevel.Info, $"Next server fetch at {nextServerFetch:ddd dd MMM HH:mm:ss}");
 
-            var emails = emailsOrNull == default ? new List<GmailEmail>() : emailsOrNull!;
-
-            List<string> newReceivedIds = await CheckForNewEmails(MailType.Received, mailClient, emails.Where(x => x.MailType == MailType.Received));
-            List<string> newSentIds = await CheckForNewEmails(MailType.Sent, mailClient, emails.Where(x => x.MailType == MailType.Sent));
-
-            if (newReceivedIds.Any())
-            {
-                LoggerType.Internal.Log(LoggingLevel.Info, $"Found {newReceivedIds!.Count} new '{MailType.Received.AsString()}' {(newReceivedIds.Count == 1 ? "e-mail" : "e-mails")}, fetching content...");
-                (List<GmailEmail>? newReceivedEmails, Exception? e) = await mailClient.TryGetEmailsFromIds(MailType.Received, newReceivedIds, showProgress: true);
-
-                if (e != default)
-                    LoggerType.GoogleCommunication.Log(LoggingLevel.Error, e, $"Could not get new {MailType.Received.AsString()} e-mail content");
-                else
-                    newReceivedEmails?.ForEach(x => emails.Add(x));
-            }
-
-            if (newSentIds.Any())
-            {
-                LoggerType.Internal.Log(LoggingLevel.Info, $"Found {newSentIds!.Count} new '{MailType.Sent.AsString()}' {(newSentIds.Count == 1 ? "e-mail" : "e-mails")}, fetching content...");
-                (List<GmailEmail>? newSentEmails, Exception? e) = await mailClient.TryGetEmailsFromIds(MailType.Sent, newSentIds, showProgress: true);
-
-                if (e != default)
-                    LoggerType.GoogleCommunication.Log(LoggingLevel.Error, e, $"Could not get new {MailType.Sent.AsString()} e-mail content");
-                else
-                    newSentEmails?.ForEach(x => emails.Add(x));
-
-            }
-
-            return emails;
-        }
-
-        private static async Task<List<string>> CheckForNewEmails(MailType type, GmailClient mailClient, IEnumerable<GmailEmail> existingEmails)
-        {
-            (List<string>? allEmailsIds, Exception? e) = type switch
-            {
-                MailType.Sent => await mailClient.TryGetAllSentEmails(),
-                MailType.Received => await mailClient.TryGetAllReceivedEmails(),
-                _ => throw new NotImplementedException(),
-            };
-
-            if (e != default)
-            {
-                LoggerType.GoogleCommunication.Log(LoggingLevel.Error, e);
-                return new();
-            }
-
-            List<string> newEmailIds = new();
-            foreach (string id in allEmailsIds!)
-            {
-                if (!existingEmails.Where(x => x.MailId.Equals(id, StringComparison.Ordinal)).Any())
-                    newEmailIds.Add(id);
-            }
-            return newEmailIds;
-        }
-
-        private static bool TryReadEmailListFromFile(string filePath, out List<GmailEmail>? emails)
-        {
-            emails = default;
-            string json;
-
-            string fileName = Path.GetFileName(filePath);
-            try
-            {
-                json = File.ReadAllText(filePath);
-            }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException or FileNotFoundException)
-            {
-                LoggerType.Internal.Log(LoggingLevel.Warning, $"Reading of file '{fileName}' failed - {e.FormatException()}");
-                return false;
-            }
-
-            if (string.IsNullOrEmpty(json))
-            {
-                LoggerType.Internal.Log(LoggingLevel.Warning, $"File '{fileName}' is empty");
-                return false;
-            }
-
-            try
-            {
-                emails = JsonConvert.DeserializeObject<List<GmailEmail>?>(json, s_serializerSettings);
-                bool success = emails != default;
-                if (!success)
-                    LoggerType.Internal.Log(LoggingLevel.Warning, $"Deserialization of file '{fileName}' returned null");
-                return success;
-            }
-            catch (JsonException e)
-            {
-                LoggerType.Internal.Log(LoggingLevel.Warning, $"Failed to deserialize from '{fileName}' - {e.FormatException()}");
-                return false;
-            }
-        }
-
-        private static bool FlushEmailsToCache(List<GmailEmail> emails, string emailsCachePath)
-        {
-            var json = string.Empty;
-            try
-            {
-                json = JsonConvert.SerializeObject(emails, s_serializerSettings);
-            }
-            catch (JsonException e)
-            {
-                LoggerType.Internal.Log(LoggingLevel.Warning, $"Failed to serialize email list - {e.FormatException()}");
-                return false;
-            }
-
-            if (!string.IsNullOrEmpty(json))
-            {
                 try
                 {
-                    File.WriteAllText(emailsCachePath, json);
-                    return true;
+                    await Task.Delay(fetchingIntervalMs, ct);
                 }
-                catch (Exception e) when (e is IOException or UnauthorizedAccessException or FileNotFoundException)
+                catch (OperationCanceledException)
                 {
-                    LoggerType.Internal.Log(LoggingLevel.Warning, $"Writing to file '{emailsCachePath}' failed - {e.FormatException()}");
-                    return false;
+                    return;
                 }
-            }
 
-            return true;
+                LoggerType.GoogleCommunication.Log(LoggingLevel.Info, "Fetching new e-mails from server...");
+                var newEmails = await mailClient.GetAllNewEmails(
+                    cacheManager.GetMailIdsOfType(MailType.Received),
+                    cacheManager.GetMailIdsOfType(MailType.Sent), ct);
+
+                if (newEmails.Any())
+                {
+                    mailManager.ProcessNewEmails(newEmails);
+                    cacheManager.AddToCache(newEmails);
+                    cacheManager.FlushEmailCacheToDisk();
+                }
+                else
+                {
+                    LoggerType.GoogleCommunication.Log(LoggingLevel.Info, "No new e-mails found");
+                }
+
+                if (ct.IsCancellationRequested)
+                    return;
+            }
+        }
+
+        private static async Task PopulateEmailCacheManager(CacheManager cacheManager, GmailClient mailClient)
+        {
+            LoggerType.Internal.Log(LoggingLevel.Info, $"Checking e-mail cache...");
+            cacheManager.ReadCacheFromDisk();
+
+            if (cacheManager.Emails.Any())
+                LoggerType.Internal.Log(LoggingLevel.Info, $"Read {cacheManager.Emails.Count} e-mails from cache");
+            else
+                LoggerType.Internal.Log(LoggingLevel.Info, $"No e-mail cache available");
+
+            var newEmails = await mailClient.GetAllNewEmails(
+                cacheManager.GetMailIdsOfType(MailType.Received),
+                cacheManager.GetMailIdsOfType(MailType.Sent));
+
+            cacheManager.AddToCache(newEmails);
+        }
+
+        private static void ApplicationClosing(object? sender, ConsoleCancelEventArgs e)
+        {
+            Console.CancelKeyPress -= ApplicationClosing;
+            s_cts.Cancel();
+            e.Cancel = true;
         }
     }
 }

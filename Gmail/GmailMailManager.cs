@@ -6,11 +6,15 @@ using GmailFetcherAndForwarder.Common;
 
 namespace GmailFetcherAndForwarder.Gmail
 {
-    internal class GmailMailManager
+    internal class GmailMailManager : IDisposable
     {
+        #region Private fields
         private readonly Dictionary<string, GmailEmail> _standaloneEmails = new();
         private readonly List<GmailThread> _threads = new();
+        private bool _disposedValue;
+        #endregion
 
+        #region Public methods
         public void Initialize(List<GmailEmail> emails)
         {
             // Emails that have something in the "In-Reply-To" part are leafs in a thread
@@ -61,6 +65,13 @@ namespace GmailFetcherAndForwarder.Gmail
             }
         }
 
+        public void ProcessNewEmails(List<GmailEmail> newEmails)
+        {
+            throw new NotImplementedException();
+        }
+        #endregion
+
+        #region Private methods
         private GmailEmail? BuildThreadBackwardsFromEmail(List<GmailEmail> mailCache, List<GmailEmail> currentThread, GmailEmail email)
         {
             var parent = mailCache.FirstOrDefault(x => x.MessageId.Equals(email.InReplyTo, StringComparison.Ordinal));
@@ -79,5 +90,32 @@ namespace GmailFetcherAndForwarder.Gmail
                 return parentsParent;
             }
         }
+        #endregion
+
+        #region Disposal
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposedValue)
+            {
+                if (disposing)
+                {
+
+                }
+
+                _standaloneEmails.Clear();
+                foreach (var thread in _threads)
+                    thread.Clear();
+                _threads.Clear();
+
+                _disposedValue = true;
+            }
+        }
+
+        public void Dispose()
+        {
+            Dispose(disposing: true);
+            GC.SuppressFinalize(this);
+        }
+        #endregion
     }
 }
