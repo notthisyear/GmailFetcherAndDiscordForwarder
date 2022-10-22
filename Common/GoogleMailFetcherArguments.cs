@@ -1,8 +1,8 @@
 ﻿using CommandLine;
 
-namespace GmailFetcherAndForwarder.Common
+namespace GmailFetcherAndDiscordForwarder.Common
 {
-    internal class GoogleMailFetcherArguments
+    internal class GmailFetcherAndDiscordForwarderArguments
     {
 
         [Option(longName: "credentials-path", Required = true, HelpText = "Path to the credentials file")]

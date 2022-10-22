@@ -6,13 +6,13 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 using CommandLine;
 using CommandLine.Text;
-using GmailFetcherAndForwarder.Common;
+using GmailFetcherAndDiscordForwarder.Common;
 
-namespace GmailFetcherAndForwarder
+namespace GmailFetcherAndDiscordForwarder
 {
     public class Program
     {
-        private const string HelpHeading = "GoogleMailFetcher - Fetches e-mails from a Google Mail account";
+        private const string HelpHeading = "GmailFetcherAndDiscordForwarder - Fetches e-mails from a Google Mail account";
         private const string HelpCopyright = "Copyright (C) 2022 Calle Lindquist";
 
         public static void Main(string[] args)
@@ -24,12 +24,12 @@ namespace GmailFetcherAndForwarder
                 x.AutoVersion = true;
             });
 
-            var result = parser.ParseArguments<GoogleMailFetcherArguments>(args);
+            var result = parser.ParseArguments<GmailFetcherAndDiscordForwarderArguments>(args);
             result.WithParsed(RunProgram)
                   .WithNotParsed(err => RunErrorFlow(result, err));
         }
 
-        private static void RunProgram(GoogleMailFetcherArguments args)
+        private static void RunProgram(GmailFetcherAndDiscordForwarderArguments args)
         {
             if (!File.Exists(args.CredentialsPath))
             {
@@ -59,7 +59,7 @@ namespace GmailFetcherAndForwarder
             tcs.Task.Wait();
         }
 
-        private static void RunErrorFlow(ParserResult<GoogleMailFetcherArguments> result, IEnumerable<Error> errors)
+        private static void RunErrorFlow(ParserResult<GmailFetcherAndDiscordForwarderArguments> result, IEnumerable<Error> errors)
         {
             var isVersionRequest = errors.FirstOrDefault(x => x.Tag == ErrorType.VersionRequestedError) != default;
             var isHelpRequest = errors.FirstOrDefault(x => x.Tag == ErrorType.HelpRequestedError) != default ||

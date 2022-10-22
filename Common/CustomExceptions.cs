@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Runtime.Serialization;
 
-namespace GmailFetcherAndForwarder.Common
+namespace GmailFetcherAndDiscordForwarder.Common
 {
     internal class GmailCommunicationException : Exception
     {

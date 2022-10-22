@@ -1,7 +1,7 @@
 ﻿using System.Linq;
 using System.Collections.Generic;
 
-namespace GmailFetcherAndForwarder.Gmail
+namespace GmailFetcherAndDiscordForwarder.Gmail
 {
     internal class GmailThread
     {

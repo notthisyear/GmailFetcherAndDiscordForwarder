@@ -1,17 +1,16 @@
-﻿using System.Linq;
+﻿using System;
 using System.Net.Http;
-using System.Net.Http.Json;
+using System.Threading;
 using System.Text.Json;
+using System.Net.Http.Json;
 using System.Threading.Tasks;
 using NLog;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
-using GmailFetcherAndForwarder.Common;
-using GmailFetcherAndForwarder.Gmail;
-using System;
-using System.Threading;
+using GmailFetcherAndDiscordForwarder.Common;
+using GmailFetcherAndDiscordForwarder.Gmail;
 
-namespace GmailFetcherAndForwarder.Discord
+namespace GmailFetcherAndDiscordForwarder.Discord
 {
     internal class DiscordClient : IDisposable
     {

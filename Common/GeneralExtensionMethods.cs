@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Net.Http;
 using System.Net.Sockets;
-using GmailFetcherAndForwarder.Gmail;
+using GmailFetcherAndDiscordForwarder.Gmail;
 
-namespace GmailFetcherAndForwarder.Common
+namespace GmailFetcherAndDiscordForwarder.Common
 {
     internal static class GeneralExtensionMethods
     {

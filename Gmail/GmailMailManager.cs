@@ -2,9 +2,9 @@
 using System.Linq;
 using System.Collections.Generic;
 using NLog;
-using GmailFetcherAndForwarder.Common;
+using GmailFetcherAndDiscordForwarder.Common;
 
-namespace GmailFetcherAndForwarder.Gmail
+namespace GmailFetcherAndDiscordForwarder.Gmail
 {
     internal class GmailMailManager : IDisposable
     {

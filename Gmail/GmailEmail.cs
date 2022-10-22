@@ -6,7 +6,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using System.Text.RegularExpressions;
 
-namespace GmailFetcherAndForwarder.Gmail
+namespace GmailFetcherAndDiscordForwarder.Gmail
 {
     internal enum MailType
     {

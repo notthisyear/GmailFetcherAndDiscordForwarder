@@ -10,9 +10,9 @@ using Google.Apis.Services;
 using Google.Apis.Util.Store;
 using Google.Apis.Auth.OAuth2;
 using Google.Apis.Gmail.v1.Data;
-using GmailFetcherAndForwarder.Common;
+using GmailFetcherAndDiscordForwarder.Common;
 
-namespace GmailFetcherAndForwarder.Gmail
+namespace GmailFetcherAndDiscordForwarder.Gmail
 {
     internal class GmailClient : IDisposable
     {

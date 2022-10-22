@@ -2,12 +2,12 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using GmailFetcherAndForwarder.Common;
-using GmailFetcherAndForwarder.Gmail;
+using GmailFetcherAndDiscordForwarder.Common;
+using GmailFetcherAndDiscordForwarder.Gmail;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 
-namespace GmailFetcherAndForwarder
+namespace GmailFetcherAndDiscordForwarder
 {
     internal class CacheManager
     {

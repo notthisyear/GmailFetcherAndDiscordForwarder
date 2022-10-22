@@ -3,18 +3,18 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using GmailFetcherAndForwarder.Common;
-using GmailFetcherAndForwarder.Discord;
-using GmailFetcherAndForwarder.Gmail;
+using GmailFetcherAndDiscordForwarder.Common;
+using GmailFetcherAndDiscordForwarder.Discord;
+using GmailFetcherAndDiscordForwarder.Gmail;
 
-namespace GmailFetcherAndForwarder
+namespace GmailFetcherAndDiscordForwarder
 {
     internal class EntryPoint
     {
-        private const string ServiceName = "GmailFetcherAndForwarder";
+        private const string ServiceName = "GmailFetcherAndDiscordForwarder";
         private static readonly CancellationTokenSource s_cts = new();
 
-        public static async Task StartProgram(GoogleMailFetcherArguments arguments)
+        public static async Task StartProgram(GmailFetcherAndDiscordForwarderArguments arguments)
         {
             LoggerType.Internal.Log(LoggingLevel.Info, $"{ServiceName} started, targeting account '{arguments.EmailAddress}'");
 
