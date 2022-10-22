@@ -12,7 +12,7 @@ using Google.Apis.Util.Store;
 using Google.Apis.Gmail.v1.Data;
 using GmailFetcherAndForwarder.Common;
 
-namespace GmailFetcherAndForwarder
+namespace GmailFetcherAndForwarder.Gmail
 {
     internal class GmailClient : IDisposable
     {
@@ -23,9 +23,9 @@ namespace GmailFetcherAndForwarder
         private const string MessageIdHeaderPartName = "Message-ID";
         private const string DateHeaderPartName = "Date";
         private const string FromHeaderPartName = "From";
+        private const string ToHeaderPartName = "To";
         private const string SubjectHeaderPartName = "Subject";
         private const string ReturnPathHeaderPartName = "Return-Path";
-        private const string ReferencesHeaderPartName = "References";
         private const string InReplyToHeaderPartName = "In-Reply-To";
 
         private readonly string _accountName;
@@ -62,19 +62,19 @@ namespace GmailFetcherAndForwarder
             });
         }
 
-        public async Task<(List<string>? ids, Exception? e)> TryGetAllEmailIdsInInbox()
+        public async Task<(List<string>? ids, Exception? e)> TryGetAllReceivedEmails()
             => await TryGetAllEmailsWithLabel(InboxLabelId);
 
         public async Task<(List<string>? ids, Exception? e)> TryGetAllSentEmails()
             => await TryGetAllEmailsWithLabel(SentLabelId);
 
-        public async Task<(GmailEmail? email, Exception? e)> TryGetEmailFromId(string emailId, bool showProgress = false)
+        public async Task<(GmailEmail? email, Exception? e)> TryGetEmailFromId(MailType type, string emailId, bool showProgress = false)
         {
-            (List<GmailEmail>? emails, Exception? e) = await TryGetEmailsFromIds(new List<string> { emailId }, showProgress);
+            (List<GmailEmail>? emails, Exception? e) = await TryGetEmailsFromIds(type, new List<string> { emailId }, showProgress);
             return (emails == null ? default : emails.First(), e);
         }
 
-        public async Task<(List<GmailEmail>? emails, Exception? e)> TryGetEmailsFromIds(List<string> emailIds, bool showProgress = false)
+        public async Task<(List<GmailEmail>? emails, Exception? e)> TryGetEmailsFromIds(MailType type, List<string> emailIds, bool showProgress = false)
         {
             if (_mailService == default)
                 return (default, new InvalidOperationException("Mail client not initialized"));
@@ -85,7 +85,7 @@ namespace GmailFetcherAndForwarder
             try
             {
                 List<GmailEmail> result = new();
-                int i = 1;
+                var i = 1;
 
                 if (showProgress)
                     LogManager.Flush();
@@ -103,9 +103,9 @@ namespace GmailFetcherAndForwarder
                         var date = emailInfoResponse.Payload.Headers.FirstOrDefault(x => x.Name.Equals(DateHeaderPartName, StringComparison.OrdinalIgnoreCase))?.Value;
                         var messageId = emailInfoResponse.Payload.Headers.FirstOrDefault(x => x.Name.Equals(MessageIdHeaderPartName, StringComparison.OrdinalIgnoreCase))?.Value;
                         var from = emailInfoResponse.Payload.Headers.FirstOrDefault(x => x.Name.Equals(FromHeaderPartName, StringComparison.OrdinalIgnoreCase))?.Value;
+                        var to = emailInfoResponse.Payload.Headers.FirstOrDefault(x => x.Name.Equals(ToHeaderPartName, StringComparison.OrdinalIgnoreCase))?.Value;
                         var subject = emailInfoResponse.Payload.Headers.FirstOrDefault(x => x.Name.Equals(SubjectHeaderPartName, StringComparison.OrdinalIgnoreCase))?.Value;
                         var returnPath = emailInfoResponse.Payload.Headers.FirstOrDefault(x => x.Name.Equals(ReturnPathHeaderPartName, StringComparison.OrdinalIgnoreCase))?.Value;
-                        var references = emailInfoResponse.Payload.Headers.FirstOrDefault(x => x.Name.Equals(ReferencesHeaderPartName, StringComparison.OrdinalIgnoreCase))?.Value;
                         var inReplyTo = emailInfoResponse.Payload.Headers.FirstOrDefault(x => x.Name.Equals(InReplyToHeaderPartName, StringComparison.OrdinalIgnoreCase))?.Value;
 
                         var bodyRaw = string.Empty;
@@ -118,7 +118,7 @@ namespace GmailFetcherAndForwarder
                         }
 
                         result.Add(string.IsNullOrEmpty(bodyRaw) ?
-                            GmailEmail.ConstructEmpty() : GmailEmail.Construct(id, from, date, messageId, subject, returnPath, references, inReplyTo, bodyRaw));
+                            GmailEmail.ConstructEmpty(type) : GmailEmail.Construct(type, id, from, to, date, messageId, subject, returnPath, inReplyTo, bodyRaw));
                     }
                     else
                     {
@@ -209,7 +209,7 @@ namespace GmailFetcherAndForwarder
         {
             try
             {
-                (int left, int top) = Console.GetCursorPosition();
+                (var left, var top) = Console.GetCursorPosition();
                 Console.SetCursorPosition(0, top);
                 if (left > 0)
                 {

@@ -1,7 +1,12 @@
 ﻿using System;
+using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Collections.Generic;
+using Newtonsoft.Json;
 using GmailFetcherAndForwarder.Common;
+using GmailFetcherAndForwarder.Gmail;
+using Newtonsoft.Json.Serialization;
 
 namespace GmailFetcherAndForwarder
 {
@@ -17,73 +22,104 @@ namespace GmailFetcherAndForwarder
             if (string.IsNullOrEmpty(accountName))
                 throw new InvalidOperationException("Could not parse email address");
 
-            LoggerType.Internal.Log(LoggingLevel.Warning, "TODO: Read local cache");
 
             using var mailClient = new GmailClient(accountName, arguments.EmailAddress, arguments.CredentialsPath!);
             LoggerType.Internal.Log(LoggingLevel.Info, "Initializing Gmail service...");
             await mailClient.Initialize(ServiceName);
 
-            (bool success, List<GmailEmail>? receivedEmails, List<GmailEmail>? sentEmails) = await TryGetAllReceivedAndSentEmails(mailClient);
+            bool success;
+            List<GmailEmail>? receivedEmails, sentEmails;
+
+            (success, receivedEmails) = await TryGetEmailsFromCacheOrServer(MailType.Received, arguments.ReceivedEmailsCachePath, mailClient);
             if (!success)
-                return;
+                receivedEmails = new();
+
+            (success, sentEmails) = await TryGetEmailsFromCacheOrServer(MailType.Sent, arguments.SentEmailsCachePath, mailClient);
+            if (!success)
+                sentEmails = new();
 
             Console.ReadLine();
+            return;
         }
 
-        private static async Task<(bool success, List<GmailEmail>? received, List<GmailEmail>? sent)> TryGetAllReceivedAndSentEmails(GmailClient mailClient)
+        private static async Task<(bool success, List<GmailEmail>? emails)> TryGetEmailsFromCacheOrServer(MailType type, string? receivedEmailsCachePath, GmailClient mailClient)
         {
-            bool success;
-            (success, List<string>? receivedEmailsIds) = await TryGetReceivedEmailIds(mailClient);
-            if (!success)
-                return (false, default, default);
+            List<GmailEmail>? emailsOrNull;
+            if (!string.IsNullOrEmpty(receivedEmailsCachePath))
+            {
+                LoggerType.Internal.Log(LoggingLevel.Info, $"Reading {type.AsString()} e-mail cache...");
+                if (TryReadEmailListFromFile(receivedEmailsCachePath!, out emailsOrNull))
+                {
+                    LoggerType.Internal.Log(LoggingLevel.Info, $"Read {emailsOrNull!.Count} {type.AsString()} e-mails from cache");
+                    return (true, emailsOrNull);
+                }
+            }
+            else
+            {
+                LoggerType.Internal.Log(LoggingLevel.Info, $"No {type.AsString()} e-mail cache available, fetching from server...");
+            }
 
-            (success, List<string>? sentEmailsIds) = await TryGetSentEmailIds(mailClient);
-            if (!success)
-                return (false, default, default);
+            (List<string>? emailsIds, Exception? e) = type switch
+            {
+                MailType.Sent => await mailClient.TryGetAllSentEmails(),
+                MailType.Received => await mailClient.TryGetAllReceivedEmails(),
+                _ => throw new NotImplementedException(),
+            };
 
-            List<GmailEmail>? receivedEmails, sentEmails;
-            Exception? e;
-
-            (receivedEmails, e) = await GetContentFromEmailIds(mailClient, receivedEmailsIds!, "received", showProgress: true);
             if (e != default)
             {
                 LoggerType.GoogleCommunication.Log(LoggingLevel.Error, e);
-                return (false, default, default);
+                return (false, default);
             }
+            LoggerType.Internal.Log(LoggingLevel.Info, $"Found {emailsIds!.Count} {(emailsIds.Count == 1 ? "e-mail" : "e-mails")} of type '{type.AsString()}', fetching content...");
 
-            (sentEmails, e) = await GetContentFromEmailIds(mailClient, sentEmailsIds!, "sent", showProgress: true);
+            (emailsOrNull, e) = await mailClient.TryGetEmailsFromIds(type, emailsIds!, showProgress: true);
             if (e != default)
+                LoggerType.GoogleCommunication.Log(LoggingLevel.Error, e);
+
+            return (e == default, emailsOrNull);
+        }
+
+        private static bool TryReadEmailListFromFile(string filePath, out List<GmailEmail>? emails)
+        {
+            emails = default;
+            string json;
+
+            string fileName = Path.GetFileName(filePath);
+            try
             {
-                LoggerType.GoogleCommunication.Log(LoggingLevel.Error, e);
-                return (false, default, default);
+                json = File.ReadAllText(filePath);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or FileNotFoundException)
+            {
+                LoggerType.Internal.Log(LoggingLevel.Warning, $"Reading of file '{fileName}' failed - {e.FormatException()}");
+                return false;
             }
 
-            return (true, receivedEmails, sentEmails);
-        }
+            if (string.IsNullOrEmpty(json))
+            {
+                LoggerType.Internal.Log(LoggingLevel.Warning, $"File '{fileName}' is empty");
+                return false;
+            }
 
-        private static async Task<(bool success, List<string>? ids)> TryGetReceivedEmailIds(GmailClient mailClient)
-        {
-            LoggerType.Internal.Log(LoggingLevel.Info, "Getting received e-mail IDs...");
-            (List<string>? ids, Exception? e) = await mailClient.TryGetAllEmailIdsInInbox();
-            if (e != default)
-                LoggerType.GoogleCommunication.Log(LoggingLevel.Error, e);
-            return (e == default, e == default ? ids : default);
-        }
-
-        private static async Task<(bool success, List<string>? ids)> TryGetSentEmailIds(GmailClient mailClient)
-        {
-            LoggerType.Internal.Log(LoggingLevel.Info, "Getting sent e-mail IDs...");
-            (List<string>? ids, Exception? e) = await mailClient.TryGetAllSentEmails();
-            if (e != default)
-                LoggerType.GoogleCommunication.Log(LoggingLevel.Error, e);
-            return (e == default, e == default ? ids : default);
-        }
-
-        private static async Task<(List<GmailEmail>? emails, Exception? e)> GetContentFromEmailIds(GmailClient client, List<string> ids, string mailType, bool showProgress = false)
-        {
-            LoggerType.Internal.Log(LoggingLevel.Info, $"Found {ids.Count} {(ids.Count == 1 ? "e-mail" : "e-mails")} of type '{mailType}', fetching content...");
-            (List<GmailEmail>? emails, Exception? e) = await client.TryGetEmailsFromIds(ids!, showProgress);
-            return (e == default ? emails : default, e);
+            try
+            {
+                var settings = new JsonSerializerSettings
+                {
+                    ContractResolver = new DefaultContractResolver { NamingStrategy = new SnakeCaseNamingStrategy() },
+                    Formatting = Formatting.Indented
+                };
+                emails = JsonConvert.DeserializeObject<List<GmailEmail>?>(json, settings);
+                bool success = emails != default;
+                if (!success)
+                    LoggerType.Internal.Log(LoggingLevel.Warning, $"Deserialization of file '{fileName}' returned null");
+                return success;
+            }
+            catch (JsonException e)
+            {
+                LoggerType.Internal.Log(LoggingLevel.Warning, $"Failed to deserialize from '{fileName}' - {e.FormatException()}");
+                return false;
+            }
         }
     }
 }

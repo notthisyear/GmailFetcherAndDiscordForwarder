@@ -2,9 +2,19 @@
 using System.Text;
 using System.Globalization;
 using System.Collections.Generic;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+using System.Text.RegularExpressions;
 
-namespace GmailFetcherAndForwarder
+namespace GmailFetcherAndForwarder.Gmail
 {
+    internal enum MailType
+    {
+        NotSet,
+        Sent,
+        Received
+    }
+
     internal record GmailEmail
     {
         #region Public methods
@@ -16,22 +26,29 @@ namespace GmailFetcherAndForwarder
 
         public string From { get; }
 
+        public string? To { get; }
+
         public string Subject { get; }
 
         public DateTime Date { get; }
 
         public string Content { get; }
 
-        public string? ReturnPath { get; }
+        [JsonConverter(typeof(StringEnumConverter))]
+        public MailType MailType { get; }
 
-        public string? References { get; }
+        public string? ReturnPath { get; }
 
         public string? InReplyTo { get; }
         #endregion
 
-        private GmailEmail()
+
+        private static readonly Regex s_filterKnownDateVariants = new(@"((\(UTC\))|(\(GMT\))|(\(PDT\))|(\(CEST\)))", RegexOptions.Compiled);
+
+        private GmailEmail(MailType mailType)
         {
             IsValid = false;
+            MailType = mailType;
             From = string.Empty;
             ReturnPath = string.Empty;
             Subject = string.Empty;
@@ -41,44 +58,52 @@ namespace GmailFetcherAndForwarder
             MessageId = string.Empty;
         }
 
-        private GmailEmail(string mailId, string messageId, string from, string subject, DateTime dateTime, string content, string? returnPath, string? references, string? inReplyTo)
+        [JsonConstructor]
+        private GmailEmail(MailType mailType, string mailId, string messageId, string from, string subject, DateTime date, string content, string? to, string? references, string? inReplyTo)
         {
             IsValid = true;
+            MailType = mailType;
+
             MailId = mailId;
             MessageId = messageId;
             From = from;
+            To = to;
             Subject = subject;
-            Date = dateTime;
+            Date = date;
             Content = content;
-            ReturnPath = returnPath;
-            References = references;
             InReplyTo = inReplyTo;
         }
 
-        public static GmailEmail ConstructEmpty()
-            => new();
+        public static GmailEmail ConstructEmpty(MailType type)
+            => new(type);
 
-        public static GmailEmail Construct(string id, string? from, string? date, string? messageId, string? subject, string? returnPath, string? references, string? inReplyTo, string bodyRaw)
+        public static GmailEmail Construct(MailType type, string id, string? from, string? to, string? date, string? messageId, string? subject, string? returnPath, string? inReplyTo, string bodyRaw)
         {
             if (string.IsNullOrEmpty(from))
-                return new();
+                return new(type);
 
-            if (string.IsNullOrEmpty(subject))
-                return new();
+            if (string.IsNullOrEmpty(to) && type == MailType.Sent)
+                return new(type);
 
             if (string.IsNullOrEmpty(date))
-                return new();
+                return new(type);
 
             if (string.IsNullOrEmpty(messageId))
-                return new();
+                return new(type);
 
             if (!DateTime.TryParse(date, CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime d))
-                return new();
+            {
+                // There are some variants of the date string that the TryParse cannot always pick up automatically
+                // We check for some known cases and try again
+                date = s_filterKnownDateVariants.Replace(date, string.Empty);
+                if (!DateTime.TryParse(date, CultureInfo.InvariantCulture, DateTimeStyles.None, out d))
+                    return new(type);
+            }
 
-            if (!TryDecodeBody(bodyRaw, out string body))
-                return new();
+            if (!TryDecodeBody(bodyRaw, out var body))
+                return new(type);
 
-            return new GmailEmail(id, messageId, from, subject, d, body, returnPath, references, inReplyTo);
+            return new GmailEmail(type, id, messageId, from, subject ?? string.Empty, d, body, to, returnPath, inReplyTo);
         }
 
         #region Private methods
@@ -87,8 +112,8 @@ namespace GmailFetcherAndForwarder
             try
             {
                 StringBuilder sb = new();
-                int numberOfCharacters = bodyRaw.Length;
-                int idx = 0;
+                var numberOfCharacters = bodyRaw.Length;
+                var idx = 0;
                 List<byte> currentData = new();
                 while (idx + 4 <= numberOfCharacters)
                 {
@@ -98,7 +123,7 @@ namespace GmailFetcherAndForwarder
                     {
                         currentSlice = Convert.FromBase64String(GetDecodeableBase64SliceFromRawText(bodyRaw, idx));
                         idx += 4;
-                        for (int i = 0; i < currentSlice.Length; i++)
+                        for (var i = 0; i < currentSlice.Length; i++)
                             currentData.Add(currentSlice[i]);
 
                     } while (ContainsUnfinishedMultiByteCharacter(currentSlice));
@@ -118,9 +143,9 @@ namespace GmailFetcherAndForwarder
 
         private static string GetDecodeableBase64SliceFromRawText(string text, int startIdx)
         {
-            bool pad = startIdx + 4 >= text.Length;
-            int endIdx = pad ? text.Length : startIdx + 4;
-            string slice = text[startIdx..endIdx];
+            var pad = startIdx + 4 >= text.Length;
+            var endIdx = pad ? text.Length : startIdx + 4;
+            var slice = text[startIdx..endIdx];
             ReplaceRFC4648Characters(ref slice);
             return pad ? slice.PadLeft(4, '=') : slice;
         }
@@ -147,7 +172,7 @@ namespace GmailFetcherAndForwarder
                 int i;
                 for (i = 0; i < 5; i++)
                 {
-                    if ((data >> (7 - i) & 0x01) == 0x00)
+                    if ((data >> 7 - i & 0x01) == 0x00)
                         break;
                 }
 
