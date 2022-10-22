@@ -14,7 +14,7 @@ namespace GmailFetcherAndForwarder.Gmail
         private bool _disposedValue;
         #endregion
 
-        public event EventHandler<(string threadRootId, GmailEmail email)>? NewEmailInThread;
+        public event EventHandler<(string threadRootMessageId, GmailEmail email)>? NewEmailInThread;
         public event EventHandler<GmailEmail>? NewEmail;
 
         #region Public methods

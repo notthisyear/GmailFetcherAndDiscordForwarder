@@ -109,6 +109,8 @@ namespace GmailFetcherAndForwarder.Gmail
         #region Private methods
         private static bool TryDecodeBody(string bodyRaw, out string body)
         {
+            // Note: This approach allow us to decode as much as possible, rather than returning nothing if there is some invalid
+            // characters in the raw body
             try
             {
                 StringBuilder sb = new();
@@ -194,6 +196,11 @@ namespace GmailFetcherAndForwarder.Gmail
             }
 
             return false;
+        }
+
+        internal string GetContentFormatted()
+        {
+            throw new NotImplementedException();
         }
         #endregion
     }

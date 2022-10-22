@@ -18,7 +18,8 @@ namespace GmailFetcherAndForwarder.Common
     internal enum LoggerType
     {
         Internal,
-        GoogleCommunication
+        GoogleCommunication,
+        DiscordCommunication
     }
 
     internal static class LoggingExtensionMethods
@@ -27,6 +28,7 @@ namespace GmailFetcherAndForwarder.Common
         {
             { LoggerType.Internal, LogManager.GetLogger($"{LoggerType.Internal}") },
             { LoggerType.GoogleCommunication, LogManager.GetLogger($"{LoggerType.GoogleCommunication}") },
+            { LoggerType.DiscordCommunication, LogManager.GetLogger($"{LoggerType.DiscordCommunication}") },
         };
 
         #region Log methods

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Net.Http;
 using System.Net.Sockets;
 using GmailFetcherAndForwarder.Gmail;
 
@@ -13,6 +14,9 @@ namespace GmailFetcherAndForwarder.Common
             else
                 return $"{e.GetType()}: {e.Message}";
         }
+
+        public static string FormatHttpResponse(this HttpResponseMessage response)
+            => $"HTTP status code {response.StatusCode}: {response.ReasonPhrase}";
 
         public static string AsString(this MailType type)
             => $"{type.ToString().ToLower()}";

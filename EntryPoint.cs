@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using GmailFetcherAndForwarder.Common;
+using GmailFetcherAndForwarder.Discord;
 using GmailFetcherAndForwarder.Gmail;
 
 namespace GmailFetcherAndForwarder
@@ -29,14 +30,22 @@ namespace GmailFetcherAndForwarder
             if (string.IsNullOrEmpty(arguments.EmailsCachePath))
                 arguments.EmailsCachePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), $"{accountName}_email_cache.json");
 
+            if (string.IsNullOrEmpty(arguments.ThreadIdMappingCachePath))
+                arguments.ThreadIdMappingCachePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), $"{accountName}_thread_id_cache.json");
+
+
             LoggerType.Internal.Log(LoggingLevel.Info, "Initializing cache manager...");
-            var cacheManager = new CacheManager(arguments.EmailsCachePath);
+            var cacheManager = new CacheManager(arguments.EmailsCachePath, arguments.ThreadIdMappingCachePath);
             await PopulateEmailCacheManager(cacheManager, mailClient);
             cacheManager.FlushEmailCacheToDisk();
+            cacheManager.ReadIdMappingCacheFromDisk();
 
             LoggerType.Internal.Log(LoggingLevel.Info, "Initializing mail manager...");
             using var mailManager = new GmailMailManager();
-            mailManager.Initialize(cacheManager.Emails);
+            mailManager.Initialize(cacheManager.GetEmails());
+
+            LoggerType.Internal.Log(LoggingLevel.Info, "Creating Discord service...");
+            using DiscordClient discordClient = new(arguments.DiscordWebhookUri!, cacheManager, mailManager);
 
             TaskCompletionSource tcs = new();
             Console.CancelKeyPress += ApplicationClosing;
@@ -95,10 +104,10 @@ namespace GmailFetcherAndForwarder
         private static async Task PopulateEmailCacheManager(CacheManager cacheManager, GmailClient mailClient)
         {
             LoggerType.Internal.Log(LoggingLevel.Info, $"Checking e-mail cache...");
-            cacheManager.ReadCacheFromDisk();
+            cacheManager.ReadEmailCacheFromDisk();
 
-            if (cacheManager.Emails.Any())
-                LoggerType.Internal.Log(LoggingLevel.Info, $"Read {cacheManager.Emails.Count} e-mails from cache");
+            if (cacheManager.HasEmails())
+                LoggerType.Internal.Log(LoggingLevel.Info, $"Read {cacheManager.GetEmails().Count} e-mails from cache");
             else
                 LoggerType.Internal.Log(LoggingLevel.Info, $"No e-mail cache available");
 
