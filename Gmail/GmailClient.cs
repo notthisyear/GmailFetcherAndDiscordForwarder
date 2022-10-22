@@ -181,7 +181,7 @@ namespace GmailFetcherAndForwarder.Gmail
                         if (showProgress)
                             WriteStringToCurrentLine("");
 
-                        return (default, new InvalidGmailResponseException($"Response for mail ID '{id}' was null"));
+                        return (default, new InvalidGmailResponseException($"Response for mail id '{id}' was null"));
                     }
                 }
 

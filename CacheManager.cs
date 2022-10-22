@@ -72,7 +72,7 @@ namespace GmailFetcherAndForwarder
             }
             catch (JsonException e)
             {
-                LoggerType.Internal.Log(LoggingLevel.Warning, $"Failed to serialize email list - {e.FormatException()}");
+                LoggerType.Internal.Log(LoggingLevel.Warning, $"Failed to serialize e-mail list - {e.FormatException()}");
                 return;
             }
 

@@ -14,6 +14,9 @@ namespace GmailFetcherAndForwarder.Gmail
         private bool _disposedValue;
         #endregion
 
+        public event EventHandler<(string threadRootId, GmailEmail email)>? NewEmailInThread;
+        public event EventHandler<GmailEmail>? NewEmail;
+
         #region Public methods
         public void Initialize(List<GmailEmail> emails)
         {
@@ -67,7 +70,59 @@ namespace GmailFetcherAndForwarder.Gmail
 
         public void ProcessNewEmails(List<GmailEmail> newEmails)
         {
-            throw new NotImplementedException();
+            var validNewEmails = newEmails.Where(x => x.IsValid).ToList();
+            int numberOfInvalidEmails = newEmails.Count - validNewEmails.Count;
+
+            if (numberOfInvalidEmails != 0)
+                LoggerType.GoogleCommunication.Log(LoggingLevel.Warning, $"{numberOfInvalidEmails} new {(numberOfInvalidEmails == 1 ? "e-mail" : "e-mails")} could not be parsed");
+
+            validNewEmails.Sort((a, b) => a.Date == b.Date ? 0 : (a.Date > b.Date ? 1 : -1));
+            foreach (var email in validNewEmails)
+            {
+                if (!string.IsNullOrEmpty(email.InReplyTo))
+                {
+                    var matchingThread = _threads.FirstOrDefault(x => email.InReplyTo!.Equals(x.CurrentLeafId, StringComparison.Ordinal));
+                    if (matchingThread != default)
+                    {
+                        matchingThread.AddLeaf(email);
+                        LoggerType.GoogleCommunication.Log(LoggingLevel.Info, $"New e-mail added to e-mail thread '{matchingThread.ThreadRootId}'");
+                        NewEmailInThread?.Invoke(this, (matchingThread.ThreadRootId, email));
+                    }
+                    else
+                    {
+                        // This can be the first response to an e-mail that previously had no children
+                        if (_standaloneEmails.TryGetValue(email.InReplyTo, out var parentEmail))
+                        {
+                            _standaloneEmails.Remove(parentEmail.MessageId);
+                            var newThread = new GmailThread(parentEmail, new List<GmailEmail>());
+                            newThread.AddLeaf(email);
+                            _threads.Add(newThread);
+                            LoggerType.GoogleCommunication.Log(LoggingLevel.Info, $"New e-mail added to e-mail new thread '{newThread.ThreadRootId}'");
+                            NewEmailInThread?.Invoke(this, (newThread.ThreadRootId, email));
+                        }
+                        else
+                        {
+                            // Since we sorted all new e-mails according to date, we *should* never end up here
+                            // However, never trust outside data
+                            LoggerType.GoogleCommunication.Log(LoggingLevel.Warning, $"New e-mail (id: '{email.MessageId}') refers to unknown parent (id: '{email.InReplyTo}')");
+                            if (!_standaloneEmails.ContainsKey(email.MessageId))
+                            {
+                                _standaloneEmails.Add(email.MessageId, email);
+                                NewEmail?.Invoke(this, email);
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    LoggerType.GoogleCommunication.Log(LoggingLevel.Info, $"New e-mail (id: '{email.MessageId}') does not refer to a parent");
+                    if (!_standaloneEmails.ContainsKey(email.MessageId))
+                    {
+                        _standaloneEmails.Add(email.MessageId, email);
+                        NewEmail?.Invoke(this, email);
+                    }
+                }
+            }
         }
         #endregion
 

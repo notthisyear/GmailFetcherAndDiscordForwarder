@@ -27,7 +27,7 @@ namespace GmailFetcherAndForwarder
             await mailClient.Initialize(ServiceName);
 
             if (string.IsNullOrEmpty(arguments.EmailsCachePath))
-                arguments.EmailsCachePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "email_cache.json");
+                arguments.EmailsCachePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), $"{accountName}_email_cache.json");
 
             LoggerType.Internal.Log(LoggingLevel.Info, "Initializing cache manager...");
             var cacheManager = new CacheManager(arguments.EmailsCachePath);
@@ -43,7 +43,7 @@ namespace GmailFetcherAndForwarder
 
             _ = Task.Run(async () =>
             {
-                await MonitorServer(1000, mailClient, cacheManager, mailManager, s_cts.Token);
+                await MonitorGmailServer(60 * 1000 * arguments.EmailFetchingIntervalMinutes, mailClient, cacheManager, mailManager, s_cts.Token);
                 tcs.SetResult();
             });
 
@@ -55,7 +55,7 @@ namespace GmailFetcherAndForwarder
             LoggerType.Internal.Log(LoggingLevel.Info, "Application closing");
         }
 
-        private static async Task MonitorServer(int fetchingIntervalMs, GmailClient mailClient, CacheManager cacheManager, GmailMailManager mailManager, CancellationToken ct)
+        private static async Task MonitorGmailServer(int fetchingIntervalMs, GmailClient mailClient, CacheManager cacheManager, GmailMailManager mailManager, CancellationToken ct)
         {
             while (true)
             {
