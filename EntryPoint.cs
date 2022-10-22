@@ -36,10 +36,14 @@ namespace GmailFetcherAndForwarder
             if (!FlushEmailsToCache(emails, arguments.EmailsCachePath!))
                 LoggerType.Internal.Log(LoggingLevel.Warning, "Flushing to cache failed");
 
+            LoggerType.Internal.Log(LoggingLevel.Info, "Initializing mail manager...");
+            var mailManager = new GmailMailManager();
+            mailManager.Initialize(emails);
+
             Console.ReadLine();
             return;
         }
- 
+
         private static async Task<List<GmailEmail>> TryGetAllEmails(string? emailCachePath, GmailClient mailClient)
         {
             List<GmailEmail>? emailsOrNull = default;
