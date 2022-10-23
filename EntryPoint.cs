@@ -36,13 +36,12 @@ namespace GmailFetcherAndDiscordForwarder
 
             LoggerType.Internal.Log(LoggingLevel.Info, "Initializing cache manager...");
             var cacheManager = new CacheManager(arguments.EmailsCachePath, arguments.ThreadIdMappingCachePath);
-            await PopulateEmailCacheManager(cacheManager, mailClient);
-            cacheManager.FlushEmailCacheToDisk();
+            cacheManager.ReadEmailCacheFromDisk();
             cacheManager.ReadIdMappingCacheFromDisk();
 
             LoggerType.Internal.Log(LoggingLevel.Info, "Initializing mail manager...");
-            using var mailManager = new GmailMailManager();
-            mailManager.Initialize(cacheManager.GetEmails());
+            using var mailManager = new GmailMailManager(cacheManager);
+            mailManager.Initialize();
 
             LoggerType.Internal.Log(LoggingLevel.Info, "Creating Discord service...");
             using DiscordClient discordClient = new(arguments.DiscordWebhookUri!, cacheManager, mailManager);
@@ -66,18 +65,26 @@ namespace GmailFetcherAndDiscordForwarder
 
         private static async Task MonitorGmailServer(int fetchingIntervalMs, GmailClient mailClient, CacheManager cacheManager, GmailMailManager mailManager, CancellationToken ct)
         {
+            bool firstTime = true;
             while (true)
             {
-                var nextServerFetch = DateTime.Now.AddMilliseconds(fetchingIntervalMs);
-                LoggerType.Internal.Log(LoggingLevel.Info, $"Next server fetch at {nextServerFetch:ddd dd MMM HH:mm:ss}");
+                if (!firstTime)
+                {
+                    var nextServerFetch = DateTime.Now.AddMilliseconds(fetchingIntervalMs);
+                    LoggerType.Internal.Log(LoggingLevel.Info, $"Next server fetch at {nextServerFetch:ddd dd MMM HH:mm:ss}");
 
-                try
-                {
-                    await Task.Delay(fetchingIntervalMs, ct);
+                    try
+                    {
+                        await Task.Delay(fetchingIntervalMs, ct);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        return;
+                    }
                 }
-                catch (OperationCanceledException)
+                else
                 {
-                    return;
+                    firstTime = false;
                 }
 
                 LoggerType.GoogleCommunication.Log(LoggingLevel.Info, "Fetching new e-mails from server...");
@@ -99,23 +106,6 @@ namespace GmailFetcherAndDiscordForwarder
                 if (ct.IsCancellationRequested)
                     return;
             }
-        }
-
-        private static async Task PopulateEmailCacheManager(CacheManager cacheManager, GmailClient mailClient)
-        {
-            LoggerType.Internal.Log(LoggingLevel.Info, $"Checking e-mail cache...");
-            cacheManager.ReadEmailCacheFromDisk();
-
-            if (cacheManager.HasEmails())
-                LoggerType.Internal.Log(LoggingLevel.Info, $"Read {cacheManager.GetEmails().Count} e-mails from cache");
-            else
-                LoggerType.Internal.Log(LoggingLevel.Info, $"No e-mail cache available");
-
-            var newEmails = await mailClient.GetAllNewEmails(
-                cacheManager.GetMailIdsOfType(MailType.Received),
-                cacheManager.GetMailIdsOfType(MailType.Sent));
-
-            cacheManager.AddToCache(newEmails);
         }
 
         private static void ApplicationClosing(object? sender, ConsoleCancelEventArgs e)

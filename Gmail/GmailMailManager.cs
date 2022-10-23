@@ -8,20 +8,30 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
 {
     internal class GmailMailManager : IDisposable
     {
+        public event EventHandler<(string threadRootMessageId, GmailEmail email)>? NewEmailInThread;
+        public event EventHandler<GmailEmail>? NewEmail;
+
         #region Private fields
+        private readonly CacheManager _cacheManager;
         private readonly Dictionary<string, GmailEmail> _standaloneEmails = new();
         private readonly List<GmailThread> _threads = new();
         private bool _disposedValue;
         #endregion
 
-        public event EventHandler<(string threadRootMessageId, GmailEmail email)>? NewEmailInThread;
-        public event EventHandler<GmailEmail>? NewEmail;
-
-        #region Public methods
-        public void Initialize(List<GmailEmail> emails)
+        public GmailMailManager(CacheManager cacheManager)
         {
+            _cacheManager = cacheManager;
+        }
+        #region Public methods
+        public void Initialize()
+        {
+            if (!_cacheManager.HasEmails())
+                return;
+
+            var cachedEmails = _cacheManager.GetEmails();
+
             // Emails that have something in the "In-Reply-To" part are leafs in a thread
-            var emailsInReply = emails.Where(x => !string.IsNullOrEmpty(x.InReplyTo));
+            var emailsInReply = cachedEmails.Where(x => !string.IsNullOrEmpty(x.InReplyTo));
             if (!emailsInReply.Any())
                 return;
 
@@ -40,7 +50,7 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
                 }
 
                 var currentThread = new List<GmailEmail>();
-                GmailEmail? root = BuildThreadBackwardsFromEmail(emails, currentThread, email);
+                GmailEmail? root = BuildThreadBackwardsFromEmail(cachedEmails, currentThread, email);
                 if (root == default)
                     LoggerType.Internal.Log(LoggingLevel.Debug, $"Could not find referenced email '{email.InReplyTo}'");
 
@@ -57,7 +67,7 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
             }
 
             // All unseen e-mails at this point are standalone emails, i.e. not part of a message thread (yet)
-            foreach (var email in emails)
+            foreach (var email in cachedEmails)
             {
                 if (seenEmails.Contains(email.MessageId))
                     continue;

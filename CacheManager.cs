@@ -51,8 +51,16 @@ namespace GmailFetcherAndDiscordForwarder
 
         public void ReadEmailCacheFromDisk()
         {
+            LoggerType.Internal.Log(LoggingLevel.Info, $"Checking e-mail cache...");
             if (TryReadCacheFromDisk(_emailCachePath, out List<GmailEmail>? emails))
+            {
+                LoggerType.Internal.Log(LoggingLevel.Info, $"Read {emails!.Count} e-mails from cache");
                 AddToCache(emails!);
+            }
+            else
+            {
+                LoggerType.Internal.Log(LoggingLevel.Info, $"No e-mail cache available");
+            }
         }
 
         public void ReadIdMappingCacheFromDisk()

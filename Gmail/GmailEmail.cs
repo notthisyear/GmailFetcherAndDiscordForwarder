@@ -74,6 +74,8 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
             InReplyTo = inReplyTo;
         }
 
+        #region Public methods
+
         public static GmailEmail ConstructEmpty(MailType type)
             => new(type);
 
@@ -196,11 +198,6 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
             }
 
             return false;
-        }
-
-        internal string GetContentFormatted()
-        {
-            throw new NotImplementedException();
         }
         #endregion
     }
