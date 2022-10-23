@@ -21,6 +21,12 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
         }
 
         #region Public methods
+        public GmailEmail GetRoot()
+            => _thread[0];
+
+        public IEnumerable<GmailEmail> GetLeafs()
+            => _thread.GetRange(1, _thread.Count - 1);
+
         public void AddLeaf(GmailEmail email)
         {
             _thread.Add(email);

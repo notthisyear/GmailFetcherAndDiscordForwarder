@@ -7,6 +7,11 @@ namespace GmailFetcherAndDiscordForwarder.Common
 {
     internal static class GeneralExtensionMethods
     {
+        public enum Emphasis
+        {
+            Italic,
+            Bold
+        }
         public static string FormatException(this Exception e)
         {
             if (e is SocketException socketException)
@@ -20,5 +25,16 @@ namespace GmailFetcherAndDiscordForwarder.Common
 
         public static string AsString(this MailType type)
             => $"{type.ToString().ToLower()}";
+
+        public static string SanitizeThreadNameForDiscord(this string s)
+            => s.Replace("@", "").Replace("#", "").Replace("\"", "").Replace("/", "").Replace("\\", "").Replace("<", "").Replace(">", "").Replace(':', ';');
+
+        public static string AddMarkdownEmphasis(this string s, Emphasis emphasis)
+           => emphasis switch
+           {
+               Emphasis.Italic => $"*{s}*",
+               Emphasis.Bold => $"**{s}**",
+               _ => throw new NotImplementedException(),
+           };
     }
 }

@@ -8,7 +8,7 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
 {
     internal class GmailMailManager : IDisposable
     {
-        public event EventHandler<(string threadRootMessageId, GmailEmail email)>? NewEmailInThread;
+        public event EventHandler<(GmailThread thread, GmailEmail email)>? NewEmailInThread;
         public event EventHandler<GmailEmail>? NewEmail;
 
         #region Private fields
@@ -88,41 +88,17 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
                 LoggerType.GoogleCommunication.Log(LoggingLevel.Warning, $"{numberOfInvalidEmails} new {(numberOfInvalidEmails == 1 ? "e-mail" : "e-mails")} could not be parsed");
 
             validNewEmails.Sort((a, b) => a.Date == b.Date ? 0 : (a.Date > b.Date ? 1 : -1));
+            List<GmailEmail> emailsWithUnknownReference = new();
             foreach (var email in validNewEmails)
             {
                 if (!string.IsNullOrEmpty(email.InReplyTo))
                 {
-                    var matchingThread = _threads.FirstOrDefault(x => email.InReplyTo!.Equals(x.CurrentLeafId, StringComparison.Ordinal));
-                    if (matchingThread != default)
-                    {
-                        matchingThread.AddLeaf(email);
-                        LoggerType.GoogleCommunication.Log(LoggingLevel.Info, $"New e-mail added to e-mail thread '{matchingThread.ThreadRootId}'");
-                        NewEmailInThread?.Invoke(this, (matchingThread.ThreadRootId, email));
-                    }
+                    // Since we sorted all new e-mails according to date, this *should* always work
+                    // However, the Date header can be forged or incorrect - never trust outside data. 
+                    if (TryParseEmailWithReference(email, out GmailThread? thread))
+                        NewEmailInThread?.Invoke(this, (thread!, email));
                     else
-                    {
-                        // This can be the first response to an e-mail that previously had no children
-                        if (_standaloneEmails.TryGetValue(email.InReplyTo, out var parentEmail))
-                        {
-                            _standaloneEmails.Remove(parentEmail.MessageId);
-                            var newThread = new GmailThread(parentEmail, new List<GmailEmail>());
-                            newThread.AddLeaf(email);
-                            _threads.Add(newThread);
-                            LoggerType.GoogleCommunication.Log(LoggingLevel.Info, $"New e-mail added to e-mail new thread '{newThread.ThreadRootId}'");
-                            NewEmailInThread?.Invoke(this, (newThread.ThreadRootId, email));
-                        }
-                        else
-                        {
-                            // Since we sorted all new e-mails according to date, we *should* never end up here
-                            // However, never trust outside data
-                            LoggerType.GoogleCommunication.Log(LoggingLevel.Warning, $"New e-mail (id: '{email.MessageId}') refers to unknown parent (id: '{email.InReplyTo}')");
-                            if (!_standaloneEmails.ContainsKey(email.MessageId))
-                            {
-                                _standaloneEmails.Add(email.MessageId, email);
-                                NewEmail?.Invoke(this, email);
-                            }
-                        }
-                    }
+                        emailsWithUnknownReference.Add(email);
                 }
                 else
                 {
@@ -134,6 +110,47 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
                     }
                 }
             }
+
+            // If we got an unknown reference, the referenced email may have been added by now
+            foreach (var email in emailsWithUnknownReference)
+            {
+                if (TryParseEmailWithReference(email, out GmailThread? thread))
+                {
+                    NewEmailInThread?.Invoke(this, (thread!, email));
+                    continue;
+                }
+
+                LoggerType.GoogleCommunication.Log(LoggingLevel.Warning, $"New e-mail (id: '{email.MessageId}') refers to unknown parent (id: '{email.InReplyTo}')");
+                if (!_standaloneEmails.ContainsKey(email.MessageId))
+                {
+                    _standaloneEmails.Add(email.MessageId, email);
+                    NewEmail?.Invoke(this, email);
+                }
+            }
+        }
+
+        private bool TryParseEmailWithReference(GmailEmail email, out GmailThread? matchingThread)
+        {
+            matchingThread = _threads.FirstOrDefault(x => email.InReplyTo!.Equals(x.CurrentLeafId, StringComparison.Ordinal));
+            if (matchingThread != default)
+            {
+                matchingThread.AddLeaf(email);
+                LoggerType.GoogleCommunication.Log(LoggingLevel.Info, $"New e-mail added to e-mail thread '{matchingThread.ThreadRootId}'");
+            }
+            else
+            {
+                // This can be the first response to an e-mail that previously had no children
+                if (_standaloneEmails.TryGetValue(email.InReplyTo!, out var parentEmail))
+                {
+                    _standaloneEmails.Remove(parentEmail.MessageId);
+                    var newThread = new GmailThread(parentEmail, new List<GmailEmail>());
+                    newThread.AddLeaf(email);
+                    _threads.Add(newThread);
+                    LoggerType.GoogleCommunication.Log(LoggingLevel.Info, $"New e-mail added to e-mail new thread '{newThread.ThreadRootId}'");
+                    matchingThread = newThread;
+                }
+            }
+            return matchingThread != default;
         }
         #endregion
 

@@ -2,9 +2,9 @@
 using System.Text;
 using System.Globalization;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using System.Text.RegularExpressions;
 
 namespace GmailFetcherAndDiscordForwarder.Gmail
 {
@@ -41,7 +41,6 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
 
         public string? InReplyTo { get; }
         #endregion
-
 
         private static readonly Regex s_filterKnownDateVariants = new(@"((\(UTC\))|(\(GMT\))|(\(PDT\))|(\(CEST\)))", RegexOptions.Compiled);
 
@@ -81,6 +80,9 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
 
         public static GmailEmail Construct(MailType type, string id, string? from, string? to, string? date, string? messageId, string? subject, string? returnPath, string? inReplyTo, string bodyRaw)
         {
+            if (type == MailType.NotSet)
+                return new(type);
+
             if (string.IsNullOrEmpty(from))
                 return new(type);
 
@@ -108,14 +110,89 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
             return new GmailEmail(type, id, messageId, from, subject ?? string.Empty, d, body, to, returnPath, inReplyTo);
         }
 
+        public string GetContentWithoutHistoryAndHtml(bool returnImmediatelyWhenHtmlIsFound)
+        {
+            StringBuilder sb = new();
+            int currentIdx = 0;
+            int lastInsertIndex = 0;
+            int lastInsertLength = 0;
+            bool lastLineWasHistory = false;
+            while (currentIdx < Content.Length)
+            {
+                bool includeCurrentLine;
+                bool isEmptyRow = false;
+                char f = Content[currentIdx];
+                if (Content[currentIdx] == '>')
+                {
+                    // History lines starts with '>'
+                    includeCurrentLine = false;
+
+                    // First history line is typically preceded by "at date someone wrote..."
+                    if (!lastLineWasHistory)
+                        sb.Remove(lastInsertIndex, lastInsertLength);
+
+                    lastLineWasHistory = true;
+                }
+                else if (Content[currentIdx] == '<')
+                {
+                    // HTML tags starts with '<'
+                    if (returnImmediatelyWhenHtmlIsFound)
+                        break;
+
+                    includeCurrentLine = false;
+                    lastLineWasHistory = false;
+                }
+                else if (Content[currentIdx] == '\r')
+                {
+                    // An empty row
+                    isEmptyRow = true;
+                    includeCurrentLine = false;
+                }
+                else
+                {
+                    includeCurrentLine = true;
+                    lastLineWasHistory = false;
+                }
+
+                if (isEmptyRow)
+                {
+                    sb.AppendLine();
+                    currentIdx += 2;
+                    lastInsertLength = 0;
+                }
+                else
+                {
+                    // Email use CRLF (https://www.rfc-editor.org/rfc/rfc5322, section 2.3)
+                    int indexOfNextNewline = Content[currentIdx..].IndexOf("\r\n") + currentIdx;
+
+                    if (includeCurrentLine)
+                    {
+                        lastInsertLength = indexOfNextNewline - currentIdx;
+                        sb.AppendLine(Content[currentIdx..indexOfNextNewline]);
+                        lastInsertIndex = sb.Length - lastInsertLength - 2;
+                    }
+                    else
+                    {
+                        lastInsertLength = 0;
+                    }
+
+                    currentIdx = indexOfNextNewline + 2;
+                }
+            }
+
+            return sb.ToString().TrimEnd();
+        }
+        #endregion
+
+
         #region Private methods
         private static bool TryDecodeBody(string bodyRaw, out string body)
         {
             // Note: This approach allow us to decode as much as possible, rather than returning nothing if there is some invalid
             // characters in the raw body
+            StringBuilder sb = new();
             try
             {
-                StringBuilder sb = new();
                 var numberOfCharacters = bodyRaw.Length;
                 var idx = 0;
                 List<byte> currentData = new();
@@ -136,13 +213,12 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
                 }
 
                 body = sb.ToString();
-                return true;
             }
-            catch (Exception e) when (e is ArgumentException || e is DecoderFallbackException)
+            catch (Exception e) when (e is ArgumentException || e is DecoderFallbackException || e is FormatException)
             {
-                body = string.Empty;
-                return false;
+                body = sb.ToString();
             }
+            return !string.IsNullOrEmpty(body);
         }
 
         private static string GetDecodeableBase64SliceFromRawText(string text, int startIdx)
