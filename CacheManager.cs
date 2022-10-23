@@ -80,7 +80,7 @@ namespace GmailFetcherAndDiscordForwarder
             => FlushCacheToDisk(_emails, _emailCachePath);
 
         public void FlushIdMappingToDisk()
-            => FlushCacheToDisk(_messageIdToThreadIdMap, _emailCachePath);
+            => FlushCacheToDisk(_messageIdToThreadIdMap, _idMappingCachePath);
 
         public void AddToCache(List<GmailEmail> newEmails)
         {
