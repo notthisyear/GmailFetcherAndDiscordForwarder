@@ -27,10 +27,14 @@ namespace GmailFetcherAndDiscordForwarder
         public CacheManager(string emailCachePath, string idMappingCachePath)
         {
             if (!File.Exists(emailCachePath))
-                File.Create(emailCachePath);
+            {
+                using var s = File.Create(emailCachePath);
+            }
 
             if (!File.Exists(idMappingCachePath))
-                File.Create(idMappingCachePath);
+            {
+                using var s = File.Create(idMappingCachePath);
+            }
 
             _emailCachePath = emailCachePath;
             _idMappingCachePath = idMappingCachePath;

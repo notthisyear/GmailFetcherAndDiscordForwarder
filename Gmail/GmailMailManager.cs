@@ -22,6 +22,7 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
         {
             _cacheManager = cacheManager;
         }
+
         #region Public methods
         public void Initialize()
         {
