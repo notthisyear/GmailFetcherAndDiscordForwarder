@@ -128,7 +128,9 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
                 }
             }
         }
+        #endregion
 
+        #region Private methods
         private bool TryParseEmailWithReference(GmailEmail email, out GmailThread? matchingThread)
         {
             matchingThread = _threads.FirstOrDefault(x => email.InReplyTo!.Equals(x.CurrentLeafId, StringComparison.Ordinal));
@@ -152,9 +154,7 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
             }
             return matchingThread != default;
         }
-        #endregion
 
-        #region Private methods
         private GmailEmail? BuildThreadBackwardsFromEmail(List<GmailEmail> mailCache, List<GmailEmail> currentThread, GmailEmail email)
         {
             var parent = mailCache.FirstOrDefault(x => x.MessageId.Equals(email.InReplyTo, StringComparison.Ordinal));

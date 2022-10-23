@@ -74,7 +74,6 @@ namespace GmailFetcherAndDiscordForwarder.Discord
 
         private void NewEmailInThreadReceived(object? sender, (GmailThread thread, GmailEmail email) e)
         {
-
             Task.Run(async () =>
             {
                 _discordPostingLock.WaitOne();
@@ -91,7 +90,6 @@ namespace GmailFetcherAndDiscordForwarder.Discord
                 return false;
             }
 
-            // Discord has a 2000 character limit for the content field
             ExecuteWebhookParams webHookParams = new()
             {
                 ThreadName = $"{email.Subject} ({email.Date:yyyy-MM-dd})".SanitizeThreadNameForDiscord(),
@@ -136,6 +134,8 @@ namespace GmailFetcherAndDiscordForwarder.Discord
             _cacheManager.AddToCache(email.MessageId, createThreadResponse.Id);
             _cacheManager.FlushIdMappingToDisk();
 
+            LoggerType.DiscordCommunication.Log(LoggingLevel.Info, $"New Discord thread with id '{createThreadResponse.Id}' created");
+
             return await TryAddMessageToThread(email.MessageId, email);
         }
 
@@ -154,7 +154,13 @@ namespace GmailFetcherAndDiscordForwarder.Discord
                 }
             }
 
-            List<string> posts = GetEmailAsPosts(email);
+            List<string>? posts = GetEmailAsPosts(email);
+
+            if (posts == default)
+            {
+                LoggerType.DiscordCommunication.Log(LoggingLevel.Warning, $"Could not generate Discord posts for e-mail '{email.MessageId}'");
+                return false;
+            }
 
             using HttpClient client = new();
             ExecuteWebhookParams webHookParams = new();
@@ -169,17 +175,21 @@ namespace GmailFetcherAndDiscordForwarder.Discord
                     LoggerType.DiscordCommunication.Log(LoggingLevel.Warning, $"Could not create post in in thread '{threadId}' - {response.FormatHttpResponse()}");
                     return false;
                 }
+
             }
 
+            LoggerType.DiscordCommunication.Log(LoggingLevel.Info, $"E-mail '{email.MessageId}' added to Discord thread '{threadId}' (generated {posts.Count} {(posts.Count == 1 ? "post" : "posts")})");
             return true;
         }
 
-        private static List<string> GetEmailAsPosts(GmailEmail email)
+        private static List<string>? GetEmailAsPosts(GmailEmail email)
         {
             var header = GetMailHeader(email.Subject, email.From, email.Date);
             var content = email.GetContentWithoutHistoryAndHtml(true);
             int totalLength = header.Length + content.Length;
 
+            if (string.IsNullOrEmpty(content))
+                return default;
             int numberOfPosts = (int)Math.Ceiling(totalLength / (double)MaxContentLengthPerPost);
             bool isMultiPost = numberOfPosts > 1;
 
@@ -255,22 +265,22 @@ namespace GmailFetcherAndDiscordForwarder.Discord
         private static string GetFirstPostContent(DateTime emailDate)
         {
             StringBuilder sb = new();
-            sb.Append("first e-mail received at ".AddMarkdownEmphasis(Emphasis.Italic));
-            sb.Append($"{emailDate.Date:yyyy-MM-dd HH:mm:ss}".AddMarkdownEmphasis(Emphasis.Bold));
-            sb.Append("thread created at ".AddMarkdownEmphasis(Emphasis.Italic));
+            sb.Append("first e-mail received at".AddMarkdownEmphasis(Emphasis.Italic, addSpaceAfter: true));
+            sb.Append($"{emailDate:yyyy-MM-dd HH:mm:ss}".AddMarkdownEmphasis(Emphasis.Bold, addSpaceAfter: true));
+            sb.Append("thread created at".AddMarkdownEmphasis(Emphasis.Italic, addSpaceAfter: true));
             sb.Append($"{DateTime.Now:yyyy-MM-dd HH:mm:ss}".AddMarkdownEmphasis(Emphasis.Bold));
             return sb.ToString();
         }
 
-        private static string GetMailHeader(string subject, string from, DateTime emailDate)
+        public static string GetMailHeader(string subject, string from, DateTime emailDate)
         {
             StringBuilder sb = new();
-            sb.AppendLine(subject.AddMarkdownEmphasis(Emphasis.Italic));
-            sb.Append("e-mail sent from ".AddMarkdownEmphasis(Emphasis.Italic));
-            sb.Append(from.AddMarkdownEmphasis(Emphasis.Bold));
-            sb.Append(" at ".AddMarkdownEmphasis(Emphasis.Italic));
+            sb.AppendLine(subject.AddMarkdownEmphasis(Emphasis.Bold));
+            sb.Append("e-mail sent from".AddMarkdownEmphasis(Emphasis.Italic, addSpaceAfter: true));
+            sb.Append(from.AddMarkdownEmphasis(Emphasis.Bold, addSpaceAfter: true));
+            sb.Append("at".AddMarkdownEmphasis(Emphasis.Italic, addSpaceAfter: true));
             sb.AppendLine($"{emailDate:yyyy-MM-dd HH:mm:ss}".AddMarkdownEmphasis(Emphasis.Bold));
-            sb.AppendLine("\n---\n");
+            sb.AppendLine("---\n");
 
             return sb.ToString();
         }

@@ -29,11 +29,11 @@ namespace GmailFetcherAndDiscordForwarder.Common
         public static string SanitizeThreadNameForDiscord(this string s)
             => s.Replace("@", "").Replace("#", "").Replace("\"", "").Replace("/", "").Replace("\\", "").Replace("<", "").Replace(">", "").Replace(':', ';');
 
-        public static string AddMarkdownEmphasis(this string s, Emphasis emphasis)
+        public static string AddMarkdownEmphasis(this string s, Emphasis emphasis, bool addSpaceAfter = false)
            => emphasis switch
            {
-               Emphasis.Italic => $"*{s}*",
-               Emphasis.Bold => $"**{s}**",
+               Emphasis.Italic => $"*{s}*{(addSpaceAfter ? " " : "")}",
+               Emphasis.Bold => $"**{s}**{(addSpaceAfter ? " " : "")}",
                _ => throw new NotImplementedException(),
            };
     }
