@@ -50,8 +50,6 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
 
         public DateTime Date { get; }
 
-        public string Content { get; }
-
         [JsonConverter(typeof(StringEnumConverter))]
         public MailType MailType { get; }
 
@@ -76,7 +74,6 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
             MailId = string.Empty;
             MessageId = string.Empty;
 
-            Content = string.Empty;
             _content = new();
         }
 
@@ -94,7 +91,6 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
             Date = date;
             InReplyTo = inReplyTo;
 
-            Content = string.Empty;
             _content = content;
         }
 
@@ -144,77 +140,15 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
             return new GmailEmail(type, id, messageId, from, subject ?? string.Empty, d, bodyParts, to, returnPath, inReplyTo);
         }
 
-        public string GetContentWithoutHistoryAndHtml(bool returnImmediatelyWhenHtmlIsFound)
+        public string GetAsContentAsPlainText()
         {
-            StringBuilder sb = new();
-            int currentIdx = 0;
-            int lastInsertIndex = 0;
-            int lastInsertLength = 0;
-            bool lastLineWasHistory = false;
-            while (currentIdx < Content.Length)
-            {
-                bool includeCurrentLine;
-                bool isEmptyRow = false;
-                char f = Content[currentIdx];
-                if (Content[currentIdx] == '>')
-                {
-                    // History lines starts with '>'
-                    includeCurrentLine = false;
+            if (!_content.Any())
+                return string.Empty;
 
-                    // First history line is typically preceded by "at date someone wrote..."
-                    if (!lastLineWasHistory)
-                        sb.Remove(lastInsertIndex, lastInsertLength);
+            if (_content.Select(x => x.type).Contains(MimeType.TextPlain))
+                return _content.First(x => x.type == MimeType.TextPlain).value.TrimEnd();
 
-                    lastLineWasHistory = true;
-                }
-                else if (Content[currentIdx] == '<')
-                {
-                    // HTML tags starts with '<'
-                    if (returnImmediatelyWhenHtmlIsFound)
-                        break;
-
-                    includeCurrentLine = false;
-                    lastLineWasHistory = false;
-                }
-                else if (Content[currentIdx] == '\r')
-                {
-                    // An empty row
-                    isEmptyRow = true;
-                    includeCurrentLine = false;
-                }
-                else
-                {
-                    includeCurrentLine = true;
-                    lastLineWasHistory = false;
-                }
-
-                if (isEmptyRow)
-                {
-                    sb.AppendLine();
-                    currentIdx += 2;
-                    lastInsertLength = 0;
-                }
-                else
-                {
-                    // Email use CRLF (https://www.rfc-editor.org/rfc/rfc5322, section 2.3)
-                    int indexOfNextNewline = Content[currentIdx..].IndexOf("\r\n") + currentIdx;
-
-                    if (includeCurrentLine)
-                    {
-                        lastInsertLength = indexOfNextNewline - currentIdx;
-                        sb.AppendLine(Content[currentIdx..indexOfNextNewline]);
-                        lastInsertIndex = sb.Length - lastInsertLength - 2;
-                    }
-                    else
-                    {
-                        lastInsertLength = 0;
-                    }
-
-                    currentIdx = indexOfNextNewline + 2;
-                }
-            }
-
-            return sb.ToString().TrimEnd();
+            return string.Empty;
         }
         #endregion
 

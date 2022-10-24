@@ -185,11 +185,12 @@ namespace GmailFetcherAndDiscordForwarder.Discord
         private static List<string>? GetEmailAsPosts(GmailEmail email)
         {
             var header = GetMailHeader(email.Subject, email.From, email.Date);
-            var content = email.GetContentWithoutHistoryAndHtml(true);
-            int totalLength = header.Length + content.Length;
+            var content = email.GetAsContentAsPlainText();
 
             if (string.IsNullOrEmpty(content))
                 return default;
+
+            int totalLength = header.Length + content.Length;
             int numberOfPosts = (int)Math.Ceiling(totalLength / (double)MaxContentLengthPerPost);
             bool isMultiPost = numberOfPosts > 1;
 
