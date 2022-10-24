@@ -185,7 +185,7 @@ namespace GmailFetcherAndDiscordForwarder.Discord
         private static List<string>? GetEmailAsPosts(GmailEmail email)
         {
             var header = GetMailHeader(email.Subject, email.From, email.Date);
-            var content = email.GetAsContentAsPlainText();
+            var content = email.GetAsContentAsPlainText(true);
 
             if (string.IsNullOrEmpty(content))
                 return default;

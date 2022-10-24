@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Globalization;
@@ -7,6 +8,7 @@ using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using HtmlAgilityPack;
 using GmailFetcherAndDiscordForwarder.Common;
 
 namespace GmailFetcherAndDiscordForwarder.Gmail
@@ -140,18 +142,21 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
             return new GmailEmail(type, id, messageId, from, subject ?? string.Empty, d, bodyParts, to, returnPath, inReplyTo);
         }
 
-        public string GetAsContentAsPlainText()
+        public string GetAsContentAsPlainText(bool tryRemoveHistory)
         {
+            string result = string.Empty;
             if (!_content.Any())
-                return string.Empty;
+                result = string.Empty;
+            else if (_content.Select(x => x.type).Contains(MimeType.TextPlain))
+                result = _content.First(x => x.type == MimeType.TextPlain).value;
+            else if (_content.Select(x => x.type).Contains(MimeType.TextHtml))
+                result = ConvertHtmlToPlainText(_content.First(x => x.type == MimeType.TextHtml).value, tryRemoveHistory);
+            else if (_content.Select(x => x.type).Contains(MimeType.TextAmpHtml))
+                LoggerType.Internal.Log(LoggingLevel.Warning, $"Cannot generate plain text from e-mail '{MessageId}' - cannot parse MIME type '{MimeType.TextAmpHtml}' is available");
 
-            if (_content.Select(x => x.type).Contains(MimeType.TextPlain))
-                return _content.First(x => x.type == MimeType.TextPlain).value.TrimEnd();
-
-            return string.Empty;
+            return TrimContent(result, tryRemoveHistory);
         }
         #endregion
-
 
         #region Private methods
         private static bool TryDecodeBody(string bodyRaw, out string body)
@@ -242,6 +247,138 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
             }
 
             return false;
+        }
+
+        public static string ConvertHtmlToPlainText(string value, bool tryRemoveHistory)
+        {
+            using StringReader r = new(value);
+            var currentContent = new HtmlDocument();
+            currentContent.Load(r);
+
+            if (currentContent.ParseErrors.Any())
+            {
+                int numberOfErrors = currentContent.ParseErrors.Count();
+                var firstError = currentContent.ParseErrors.First();
+                string parseErrorText = $"a {firstError.Code} error at {firstError.Line}:{firstError.LinePosition} - {firstError.Reason} ({firstError.Code})";
+                LoggerType.Internal.Log(LoggingLevel.Warning, $"Parsing of HTML e-mail failed with {numberOfErrors} {(numberOfErrors == 1 ? "error" : "errors")} - first error: {parseErrorText}");
+                return string.Empty;
+            }
+
+            if (!currentContent.DocumentNode.HasChildNodes)
+            {
+                LoggerType.Internal.Log(LoggingLevel.Warning, "Parsing of HTML e-mail failed, could not find any nodes");
+                return string.Empty;
+            }
+
+            // Probably "<html><head><body></body></head></html>"-structure
+            StringBuilder sb = new();
+            var htmlNode = currentContent.DocumentNode.ChildNodes.FirstOrDefault(x => x.Name.Equals("html", StringComparison.OrdinalIgnoreCase));
+            if (htmlNode != default)
+            {
+                if (htmlNode.HasChildNodes)
+                {
+                    var bodyNode = htmlNode.ChildNodes.FirstOrDefault(x => x.Name.Equals("body", StringComparison.OrdinalIgnoreCase));
+                    if (bodyNode != default)
+                    {
+                        BuildContentFromBodyNodes(bodyNode, tryRemoveHistory, sb);
+                        return sb.ToString();
+                    }
+                    LoggerType.Internal.Log(LoggingLevel.Warning, "Parsing of HTML e-mail failed, could not find body node");
+                    return string.Empty;
+                }
+                LoggerType.Internal.Log(LoggingLevel.Warning, "Parsing of HTML e-mail failed, HTML node does not have any children");
+                return string.Empty;
+            }
+
+            // The body can be omitted 
+            foreach (var node in currentContent.DocumentNode.ChildNodes)
+            {
+                if (node.Name.Equals("meta", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                BuildContentFromBodyNodes(node, tryRemoveHistory, sb);
+            }
+
+            return sb.ToString();
+        }
+
+        private static void BuildContentFromBodyNodes(HtmlNode bodyNode, bool tryRemoveHistory, StringBuilder contentBuilder)
+        {
+            foreach (var node in bodyNode.ChildNodes)
+            {
+                if (tryRemoveHistory)
+                {
+                    if (node.Name.Equals("blockquote", StringComparison.OrdinalIgnoreCase))
+                        continue;
+                }
+
+                if (node.Name.Equals("#text", StringComparison.OrdinalIgnoreCase))
+                    contentBuilder.Append(node.InnerText.Replace("&nbsp;", " "));
+                else if (node.Name.Equals("br", StringComparison.OrdinalIgnoreCase))
+                    contentBuilder.AppendLine();
+                else if (node.Name.Equals("p", StringComparison.OrdinalIgnoreCase) && node.InnerText.Equals("&nbsp;", StringComparison.OrdinalIgnoreCase))
+                    contentBuilder.AppendLine();
+                else if (node.HasChildNodes)
+                    BuildContentFromBodyNodes(node, tryRemoveHistory, contentBuilder);
+            }
+        }
+
+        private static string TrimContent(string content, bool tryRemoveHistory)
+        {
+            if (string.IsNullOrEmpty(content))
+                return string.Empty;
+
+            StringBuilder sb = new();
+            int currentIdx = 0;
+            int lastInsertIndex = 0;
+            int lastInsertLength = 0;
+            bool lastLineWasHistory = false;
+            bool lastInsertedLineWasEmpty = false;
+
+            while (currentIdx < content.Length)
+            {
+                // Email use CRLF (https://www.rfc-editor.org/rfc/rfc5322, section 2.3)
+                int newLineIndex = content[currentIdx..].IndexOf("\n");
+                int indexOfNextNewline = newLineIndex == -1 ? content.Length : newLineIndex + currentIdx;
+                string currentLine = content[currentIdx..indexOfNextNewline];
+
+                // Empty line
+                if (currentLine.Trim().Length == 0)
+                {
+                    if (lastInsertedLineWasEmpty)
+                    {
+                        currentIdx = indexOfNextNewline + 1;
+                        continue;
+                    }
+
+                    lastInsertedLineWasEmpty = true;
+                    sb.AppendLine();
+                }
+                else
+                {
+                    if (tryRemoveHistory && content[currentIdx] == '>')
+                    {
+                        // First history line is typically preceded by "at date someone wrote..."
+                        if (!lastLineWasHistory && !lastInsertedLineWasEmpty)
+                            sb.Remove(lastInsertIndex, lastInsertLength);
+
+                        lastLineWasHistory = true;
+                    }
+                    else
+                    {
+                        string lineToAppend = currentLine.TrimEnd().Replace("&nbsp;", " ");
+                        sb.AppendLine(lineToAppend);
+
+                        lastInsertedLineWasEmpty = false;
+                        lastLineWasHistory = false;
+                        lastInsertLength = lineToAppend.Length;
+                        lastInsertIndex = sb.Length - lastInsertLength;
+                    }
+                }
+
+                currentIdx = indexOfNextNewline + 1;
+            }
+            return sb.ToString();
         }
         #endregion
     }

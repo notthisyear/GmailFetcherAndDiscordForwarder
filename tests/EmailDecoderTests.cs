@@ -37,7 +37,7 @@ namespace GmailFetcherAndDiscordForwarderTests
         [Fact]
         internal void InvalidMailTypeShouldProduceEmptyEmail()
         {
-            Assert.False(GetValidEmailWithParts(MailType.NotSet).IsValid);
+            Assert.False(GetValidPlainTextEmailWithParts(MailType.NotSet).IsValid);
         }
 
         [Theory]
@@ -48,14 +48,14 @@ namespace GmailFetcherAndDiscordForwarderTests
         [InlineData(MailPart.BodyRaw)]
         internal void MissingDataShouldProduceInvalidEmail(MailPart part)
         {
-            Assert.False(GetValidEmailWithParts(MailType.Sent, (part, string.Empty)).IsValid);
+            Assert.False(GetValidPlainTextEmailWithParts(MailType.Sent, (part, string.Empty)).IsValid);
         }
 
         [Theory]
         [InlineData("Mon, 16 Jan 2011 15:07:55")]
         internal void InvalidDateShouldProduceEmptyEmail(string date)
         {
-            Assert.False(GetValidEmailWithParts(MailType.Received, (MailPart.Date, date)).IsValid);
+            Assert.False(GetValidPlainTextEmailWithParts(MailType.Received, (MailPart.Date, date)).IsValid);
         }
 
         [Theory]
@@ -63,7 +63,7 @@ namespace GmailFetcherAndDiscordForwarderTests
         [InlineData("")]
         internal void InvalidBodyRawShouldProduceEmptyEmail(string bodyRaw)
         {
-            Assert.False(GetValidEmailWithParts(MailType.Received, (MailPart.BodyRaw, bodyRaw)).IsValid);
+            Assert.False(GetValidPlainTextEmailWithParts(MailType.Received, (MailPart.BodyRaw, bodyRaw)).IsValid);
         }
 
         [Theory]
@@ -71,9 +71,10 @@ namespace GmailFetcherAndDiscordForwarderTests
         [InlineData("RXR0IGV4ZW1wZWwgbWVkIMOlLCDDpCBvY2ggw7Yu", "Ett exempel med å, ä och ö.")]
         internal void VerifyBodyRawParser(string bodyRaw, string expectedContent)
         {
-            var email = GetValidEmailWithParts(MailType.Received, (MailPart.BodyRaw, bodyRaw));
-            Assert.Equal(expectedContent, email.Content);
+            var email = GetValidPlainTextEmailWithParts(MailType.Received, (MailPart.BodyRaw, bodyRaw));
+            Assert.Equal(expectedContent, email.GetAsContentAsPlainText(true));
         }
+
         [Theory]
         [InlineData("Fri, 21 Oct 2022 13:50:42 +0200", 2022, 10, 21, 13, 50, 42, 2)]
         [InlineData("Sat, 23 Jun 2018 08:10:44 +0000 (GMT)", 2018, 6, 23, 8, 10, 44, 0)]
@@ -84,11 +85,11 @@ namespace GmailFetcherAndDiscordForwarderTests
         {
             DateTime expected = new(year, month, day, hour, minute, second, DateTimeKind.Utc);
             expected = expected.AddHours(-timezoneShift);
-            var email = GetValidEmailWithParts(MailType.Received, (MailPart.Date, date));
+            var email = GetValidPlainTextEmailWithParts(MailType.Received, (MailPart.Date, date));
             Assert.Equal(expected, email.Date.ToUniversalTime());
         }
 
-        private static GmailEmail GetValidEmailWithParts(MailType type, params (MailPart part, string value)[]? content)
+        private static GmailEmail GetValidPlainTextEmailWithParts(MailType type, params (MailPart part, string value)[]? content)
         {
             List<MailPart> givenParts;
             Dictionary<MailPart, string> parts = new();
@@ -114,7 +115,7 @@ namespace GmailFetcherAndDiscordForwarderTests
                 parts[MailPart.Subject],
                 parts[MailPart.ReturnPath],
                 parts[MailPart.InReplyTo],
-                parts[MailPart.BodyRaw]);
+                new() { (MimeType.TextPlain, parts[MailPart.BodyRaw]) });
         }
     }
 }
