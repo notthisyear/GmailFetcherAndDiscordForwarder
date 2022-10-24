@@ -11,7 +11,7 @@ namespace GmailFetcherAndDiscordForwarder.Common
         [Option(longName: "email-address", Required = true, HelpText = "The Google e-mail address to target")]
         public string? EmailAddress { get; set; }
 
-        [Option(longName: "discord-webhook-uri", Required = true, HelpText = "A Discord webhook URI to sent emails to")]
+        [Option(longName: "discord-webhook-uri", HelpText = "A Discord webhook URI to sent emails to (not required if --only-build-email-cache is set")]
         public string? DiscordWebhookUri { get; set; }
 
         [Option(longName: "fetching-interval", Default = 5, HelpText = "The interval with which to check the account for new e-mails (in minutes)")]
@@ -22,5 +22,10 @@ namespace GmailFetcherAndDiscordForwarder.Common
 
         [Option(longName: "thread-id-mapping-cache", HelpText = "Path to cached thread ID and message ID map (as JSON). If omitted, a new cache will be created in the current users home directory")]
         public string? ThreadIdMappingCachePath { get; set; }
+
+        [Option(longName: "only-build-email-cache", Required = false, Default = false, HelpText = "Only build e-mail cache and save to disk")]
+        public bool OnlyBuildEmailCache { get; set; }
+
+
     }
 }

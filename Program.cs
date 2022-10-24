@@ -43,10 +43,13 @@ namespace GmailFetcherAndDiscordForwarder
                 Environment.Exit(1);
             }
 
-            if (string.IsNullOrEmpty(args.DiscordWebhookUri))
+            if (!args.OnlyBuildEmailCache)
             {
-                LoggerType.Internal.Log(LoggingLevel.Error, "ERROR: No Discord webhook given");
-                Environment.Exit(1);
+                if (string.IsNullOrEmpty(args.DiscordWebhookUri))
+                {
+                    LoggerType.Internal.Log(LoggingLevel.Error, "ERROR: No Discord webhook given");
+                    Environment.Exit(1);
+                }
             }
 
             var tcs = new TaskCompletionSource();

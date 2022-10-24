@@ -43,19 +43,30 @@ namespace GmailFetcherAndDiscordForwarder
             using var mailManager = new GmailMailManager(cacheManager);
             mailManager.Initialize();
 
-            LoggerType.Internal.Log(LoggingLevel.Info, "Creating Discord service...");
-            using DiscordClient discordClient = new(arguments.DiscordWebhookUri!, cacheManager, mailManager);
-
-            TaskCompletionSource tcs = new();
-            Console.CancelKeyPress += ApplicationClosing;
-
-            _ = Task.Run(async () =>
+            if (!arguments.OnlyBuildEmailCache)
             {
-                await MonitorGmailServer(60 * 1000 * arguments.EmailFetchingIntervalMinutes, mailClient, cacheManager, mailManager, s_cts.Token);
-                tcs.SetResult();
-            });
+                LoggerType.Internal.Log(LoggingLevel.Info, "Creating Discord service...");
+                using DiscordClient discordClient = new(arguments.DiscordWebhookUri!, cacheManager, mailManager);
 
-            await tcs.Task;
+                TaskCompletionSource tcs = new();
+                Console.CancelKeyPress += ApplicationClosing;
+
+                _ = Task.Run(async () =>
+                {
+                    await MonitorGmailServer(60 * 1000 * arguments.EmailFetchingIntervalMinutes, mailClient, cacheManager, mailManager, s_cts.Token);
+                    tcs.SetResult();
+                });
+
+                await tcs.Task;
+            }
+            else
+            {
+                var newEmails = await mailClient.GetAllNewEmails(
+                    cacheManager.GetMailIdsOfType(MailType.Received),
+                    cacheManager.GetMailIdsOfType(MailType.Sent));
+                cacheManager.AddToCache(newEmails);
+                cacheManager.FlushEmailCacheToDisk();
+            }
 
             cacheManager.Clear();
             s_cts.Dispose();
