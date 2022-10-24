@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Net;
 using System.Text;
 using System.Net.Http;
 using System.Threading;
@@ -49,6 +50,8 @@ namespace GmailFetcherAndDiscordForwarder.Discord
 
         // Discord has a 2000 character limit for the content field
         private const int MaxContentLengthPerPost = 2000;
+        private const int TimeBetweenAttemptsMs = 2000;
+        private const int NumberOfMaxAttempts = 10;
         #endregion
 
         public DiscordClient(string discordWebhook, CacheManager cacheManager, GmailMailManager mailManager)
@@ -96,22 +99,11 @@ namespace GmailFetcherAndDiscordForwarder.Discord
                 Content = GetFirstPostContent(email.Date)
             };
 
-            using HttpClient client = new();
             var httpContent = JsonContent.Create(webHookParams, options: s_serializerOptions);
-            var response = await client.PostAsync($"{_discordWebhook}{AddQueryParameter(QueryParameter.Wait, true)}", httpContent);
+            (bool success, string responseContent) = await TryPostContentToDiscord($"{_discordWebhook}{AddQueryParameter(QueryParameter.Wait, true)}", httpContent, true);
 
-            if (!response.IsSuccessStatusCode)
-            {
-                LoggerType.DiscordCommunication.Log(LoggingLevel.Warning, $"Could not create new thread - {response.FormatHttpResponse()}");
+            if (!success)
                 return false;
-            }
-
-            var responseContent = await response.Content.ReadAsStringAsync();
-            if (string.IsNullOrEmpty(responseContent))
-            {
-                LoggerType.DiscordCommunication.Log(LoggingLevel.Warning, "Could not read response content");
-                return false;
-            }
 
             CreateThreadResponse createThreadResponse;
             try
@@ -162,24 +154,68 @@ namespace GmailFetcherAndDiscordForwarder.Discord
                 return false;
             }
 
-            using HttpClient client = new();
             ExecuteWebhookParams webHookParams = new();
             foreach (var post in posts)
             {
                 webHookParams.Content = post;
                 var httpContent = JsonContent.Create(webHookParams, options: s_serializerOptions);
-                var response = await client.PostAsync($"{_discordWebhook}{AddQueryParameter(QueryParameter.ThreadId, threadId!)}", httpContent);
+                (bool success, string _) = await TryPostContentToDiscord($"{_discordWebhook}{AddQueryParameter(QueryParameter.ThreadId, threadId!)}", httpContent, false);
 
-                if (!response.IsSuccessStatusCode)
-                {
-                    LoggerType.DiscordCommunication.Log(LoggingLevel.Warning, $"Could not create post in in thread '{threadId}' - {response.FormatHttpResponse()}");
+                if (!success)
                     return false;
-                }
-
             }
 
             LoggerType.DiscordCommunication.Log(LoggingLevel.Info, $"E-mail '{email.MessageId}' added to Discord thread '{threadId}' (generated {posts.Count} {(posts.Count == 1 ? "post" : "posts")})");
             return true;
+        }
+
+        private async Task<bool> PostMissingThread(GmailThread thread)
+        {
+            bool success = await TryMakeNewPost(thread.GetRoot());
+            if (!success)
+                return false;
+
+            foreach (var leaf in thread.GetLeafs())
+            {
+                success = await TryAddMessageToThread(thread.ThreadRootId, leaf);
+                if (!success)
+                    break;
+            }
+            return success;
+        }
+
+        private static async Task<(bool success, string responseContent)> TryPostContentToDiscord(string uri, HttpContent content, bool readResponseContent)
+        {
+            using HttpClient client = new();
+            HttpResponseMessage? response;
+            int numberOfAttempts = 1;
+
+            while (true)
+            {
+                response = await client.PostAsync(uri, content);
+                if (response.IsSuccessStatusCode)
+                    break;
+
+                LoggerType.DiscordCommunication.Log(LoggingLevel.Warning, $"Could not post content - {response.FormatHttpResponse()}");
+                if (numberOfAttempts == NumberOfMaxAttempts)
+                {
+                    LoggerType.DiscordCommunication.Log(LoggingLevel.Error, "Max attempts reached, aborting");
+                    return (false, string.Empty);
+                }
+                LoggerType.DiscordCommunication.Log(LoggingLevel.Debug, $"Next attempt ({numberOfAttempts++}/{NumberOfMaxAttempts}) in {TimeBetweenAttemptsMs / 1000.0} s");
+                await Task.Delay(TimeBetweenAttemptsMs);
+            }
+
+            if (!readResponseContent)
+                return (true, string.Empty);
+
+            var responseContent = await response.Content.ReadAsStringAsync();
+            if (string.IsNullOrEmpty(responseContent))
+            {
+                LoggerType.DiscordCommunication.Log(LoggingLevel.Warning, "Could not read response content");
+                return (false, string.Empty);
+            }
+            return (true, responseContent);
         }
 
         private static List<string>? GetEmailAsPosts(GmailEmail email)
@@ -236,21 +272,6 @@ namespace GmailFetcherAndDiscordForwarder.Discord
             }
 
             return result;
-        }
-
-        private async Task<bool> PostMissingThread(GmailThread thread)
-        {
-            bool success = await TryMakeNewPost(thread.GetRoot());
-            if (!success)
-                return false;
-
-            foreach (var leaf in thread.GetLeafs())
-            {
-                success = await TryAddMessageToThread(thread.ThreadRootId, leaf);
-                if (!success)
-                    break;
-            }
-            return success;
         }
 
         private static string AddQueryParameter(QueryParameter parameter, dynamic value)
