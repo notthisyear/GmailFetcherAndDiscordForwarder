@@ -164,17 +164,24 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
                         var returnPath = emailInfoResponse.Payload.Headers.FirstOrDefault(x => x.Name.Equals(ReturnPathHeaderPartName, StringComparison.OrdinalIgnoreCase))?.Value;
                         var inReplyTo = emailInfoResponse.Payload.Headers.FirstOrDefault(x => x.Name.Equals(InReplyToHeaderPartName, StringComparison.OrdinalIgnoreCase))?.Value;
 
-                        var bodyRaw = string.Empty;
+                        var bodyParts = new List<(MimeType type, string content)>();
                         if (!string.IsNullOrEmpty(date) && !string.IsNullOrEmpty(from))
                         {
-                            if (emailInfoResponse.Payload.Parts == null && emailInfoResponse.Payload.Body != null)
-                                bodyRaw = emailInfoResponse.Payload.Body.Data;
-                            else
-                                bodyRaw = ExtractBodyByParts(emailInfoResponse.Payload.Parts);
+                            if (emailInfoResponse.Payload.Parts == default && emailInfoResponse.Payload.Body != default)
+                            {
+                                if (emailInfoResponse.Payload.MimeType.TryParseAsMimeType(out MimeType mimeType))
+                                    bodyParts.Add((mimeType, emailInfoResponse.Payload.Body.Data));
+                                else
+                                    LoggerType.GoogleCommunication.Log(LoggingLevel.Warning, $"E-mail has unknown MIME type '{emailInfoResponse.Payload.MimeType}'");
+                            }
+                            else if (emailInfoResponse.Payload.Parts != default)
+                            {
+                                ExtractBodyRecursively(emailInfoResponse.Payload.Parts, bodyParts);
+                            }
                         }
 
-                        result.Add(string.IsNullOrEmpty(bodyRaw) ?
-                            GmailEmail.ConstructEmpty(type) : GmailEmail.Construct(type, id, from, to, date, messageId, subject, returnPath, inReplyTo, bodyRaw));
+                        result.Add(!bodyParts.Any() ?
+                            GmailEmail.ConstructEmpty(type) : GmailEmail.Construct(type, id, from, to, date, messageId, subject, returnPath, inReplyTo, bodyParts));
                     }
                     else
                     {
@@ -241,30 +248,35 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
 
         }
 
-        private static string ExtractBodyByParts(IList<MessagePart>? part, string currentBody = "")
+        private static void ExtractBodyRecursively(IList<MessagePart>? currentParts, List<(MimeType type, string content)> body)
         {
-            var newBody = currentBody;
-            if (part == null)
+            if (currentParts == null)
+                return;
+
+            foreach (MessagePart part in currentParts)
             {
-                return newBody;
-            }
-            else
-            {
-                foreach (MessagePart parts in part)
+                if (part.Parts == null)
                 {
-                    if (parts.Parts == null)
+                    if (part.Body != null)
                     {
-                        if (parts.Body != null && !string.IsNullOrEmpty(parts.Body.Data))
+                        // If the Data field is null, it is probably an attachment (which we simply ignore)
+                        if (!string.IsNullOrEmpty(part.Body.Data))
                         {
-                            newBody += parts.Body.Data;
+                            if (part.MimeType.TryParseAsMimeType(out MimeType mimeType))
+                                body.Add((mimeType, part.Body.Data));
+                            else
+                                LoggerType.GoogleCommunication.Log(LoggingLevel.Warning, $"E-mail has unknown MIME type '{part.MimeType}'");
                         }
                     }
                     else
                     {
-                        return ExtractBodyByParts(parts.Parts, newBody);
+                        LoggerType.GoogleCommunication.Log(LoggingLevel.Warning, "Unexpected null in part of e-mail body");
                     }
                 }
-                return newBody;
+                else
+                {
+                    ExtractBodyRecursively(part.Parts, body);
+                }
             }
         }
 

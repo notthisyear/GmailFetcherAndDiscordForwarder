@@ -1,10 +1,13 @@
 ﻿using System;
+using System.Linq;
 using System.Text;
 using System.Globalization;
+using System.ComponentModel;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using GmailFetcherAndDiscordForwarder.Common;
 
 namespace GmailFetcherAndDiscordForwarder.Gmail
 {
@@ -13,6 +16,21 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
         NotSet,
         Sent,
         Received
+    }
+
+    internal enum MimeType
+    {
+        [Description("N/a")]
+        None,
+
+        [Description("text/plain")]
+        TextPlain,
+
+        [Description("text/html")]
+        TextHtml,
+
+        [Description("text/x-amp-html")]
+        TextAmpHtml
     }
 
     internal record GmailEmail
@@ -44,6 +62,10 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
 
         private static readonly Regex s_filterKnownDateVariants = new(@"((\(UTC\))|(\(GMT\))|(\(PDT\))|(\(CEST\)))", RegexOptions.Compiled);
 
+        [JsonProperty]
+        [JsonConverter(typeof(StringEnumConverter))]
+        private readonly List<(MimeType type, string value)> _content;
+
         private GmailEmail(MailType mailType)
         {
             IsValid = false;
@@ -52,13 +74,15 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
             ReturnPath = string.Empty;
             Subject = string.Empty;
             Date = DateTime.MinValue;
-            Content = string.Empty;
             MailId = string.Empty;
             MessageId = string.Empty;
+
+            Content = string.Empty;
+            _content = new();
         }
 
         [JsonConstructor]
-        private GmailEmail(MailType mailType, string mailId, string messageId, string from, string subject, DateTime date, string content, string? to, string? references, string? inReplyTo)
+        private GmailEmail(MailType mailType, string mailId, string messageId, string from, string subject, DateTime date, List<(MimeType type, string value)> content, string? to, string? references, string? inReplyTo)
         {
             IsValid = true;
             MailType = mailType;
@@ -69,8 +93,10 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
             To = to;
             Subject = subject;
             Date = date;
-            Content = content;
             InReplyTo = inReplyTo;
+
+            Content = string.Empty;
+            _content = content;
         }
 
         #region Public methods
@@ -78,7 +104,7 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
         public static GmailEmail ConstructEmpty(MailType type)
             => new(type);
 
-        public static GmailEmail Construct(MailType type, string id, string? from, string? to, string? date, string? messageId, string? subject, string? returnPath, string? inReplyTo, string bodyRaw)
+        public static GmailEmail Construct(MailType type, string id, string? from, string? to, string? date, string? messageId, string? subject, string? returnPath, string? inReplyTo, List<(MimeType type, string content)> bodyPartsRaw)
         {
             if (type == MailType.NotSet)
                 return new(type);
@@ -104,10 +130,19 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
                     return new(type);
             }
 
-            if (!TryDecodeBody(bodyRaw, out var body))
+            List<(MimeType type, string content)> bodyParts = new();
+            foreach (var part in bodyPartsRaw)
+            {
+                if (!TryDecodeBody(part.content, out var body))
+                    LoggerType.Internal.Log(LoggingLevel.Warning, $"Failed to decode raw body part with MIME type '{part.type}'");
+                else
+                    bodyParts.Add((part.type, body));
+            }
+
+            if (!bodyParts.Any())
                 return new(type);
 
-            return new GmailEmail(type, id, messageId, from, subject ?? string.Empty, d, body, to, returnPath, inReplyTo);
+            return new GmailEmail(type, id, messageId, from, subject ?? string.Empty, d, bodyParts, to, returnPath, inReplyTo);
         }
 
         public string GetContentWithoutHistoryAndHtml(bool returnImmediatelyWhenHtmlIsFound)
