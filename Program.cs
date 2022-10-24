@@ -45,7 +45,7 @@ namespace GmailFetcherAndDiscordForwarder
 
             if (!args.OnlyBuildEmailCache)
             {
-                if (string.IsNullOrEmpty(args.DiscordWebhookUri))
+                if (string.IsNullOrEmpty(args.DiscordWebhookUrl))
                 {
                     LoggerType.Internal.Log(LoggingLevel.Error, "ERROR: No Discord webhook given");
                     Environment.Exit(1);

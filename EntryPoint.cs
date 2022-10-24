@@ -33,11 +33,20 @@ namespace GmailFetcherAndDiscordForwarder
             if (string.IsNullOrEmpty(arguments.ThreadIdMappingCachePath))
                 arguments.ThreadIdMappingCachePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), $"{accountName}_thread_id_cache.json");
 
-
             LoggerType.Internal.Log(LoggingLevel.Info, "Initializing cache manager...");
             var cacheManager = new CacheManager(arguments.EmailsCachePath, arguments.ThreadIdMappingCachePath);
             cacheManager.ReadEmailCacheFromDisk();
             cacheManager.ReadIdMappingCacheFromDisk();
+
+            bool buildCache = arguments.OnlyBuildEmailCache || !cacheManager.HasEmails();
+            if (buildCache)
+            {
+                var newEmails = await mailClient.GetAllNewEmails(
+                    cacheManager.GetMailIdsOfType(MailType.Received),
+                    cacheManager.GetMailIdsOfType(MailType.Sent));
+                cacheManager.AddToCache(newEmails);
+                cacheManager.FlushEmailCacheToDisk();
+            }
 
             LoggerType.Internal.Log(LoggingLevel.Info, "Initializing mail manager...");
             using var mailManager = new GmailMailManager(cacheManager);
@@ -46,7 +55,7 @@ namespace GmailFetcherAndDiscordForwarder
             if (!arguments.OnlyBuildEmailCache)
             {
                 LoggerType.Internal.Log(LoggingLevel.Info, "Creating Discord service...");
-                using DiscordClient discordClient = new(arguments.DiscordWebhookUri!, cacheManager, mailManager);
+                using DiscordClient discordClient = new(arguments.DiscordWebhookUrl!, cacheManager, mailManager);
 
                 TaskCompletionSource tcs = new();
                 Console.CancelKeyPress += ApplicationClosing;
@@ -58,14 +67,6 @@ namespace GmailFetcherAndDiscordForwarder
                 });
 
                 await tcs.Task;
-            }
-            else
-            {
-                var newEmails = await mailClient.GetAllNewEmails(
-                    cacheManager.GetMailIdsOfType(MailType.Received),
-                    cacheManager.GetMailIdsOfType(MailType.Sent));
-                cacheManager.AddToCache(newEmails);
-                cacheManager.FlushEmailCacheToDisk();
             }
 
             cacheManager.Clear();
