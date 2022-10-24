@@ -6,7 +6,7 @@ To run the program, a Gmail account where the Google Drive API is enabled is req
 Next, a webhook must be created at the desired Discord server. Follow the steps [at this link](https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks) to set it up. Note the `Webhook URL`.
 
 ## Running the program
-To run the program, simple clone this repository and build it with `dotnet build`. The build command should restore the required NuGet packages automatically.
+To run the program, simple clone this repository and build it with `dotnet build`. The build command should restore the required NuGet packages automatically. `dotnet` might decide to regenerate the existing `AssemblyInfo.cs` file, which can cause the build to fail as the test project accesses internal members. If that happens, try restoring the `AssemblyInfo.cs` file (`git restore AssemblyInfo.cs`) and run `dotnet build` again.
 
 Typical usage:
 
@@ -15,6 +15,8 @@ GmailFetcherAndDiscordForwarder --credentials-path path/to/credentials
                                 --email-address firstname.lastname@example.com 
                                 --discord-webhook-url https://discord.com/api/webhook/id/token
 ```
+
+The first time the program runs, the authentication flow will open a browser where the user must log in to the relevant Gmail account and allow the program to access its inbox. It will generate a token file that gets re-used until it expires.
 
 The program will first fetch all sent and received e-mail from the specified account and build the cache. Then, it will enter an infinite loop where it periodically checks for new e-mails.
 

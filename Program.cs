@@ -81,7 +81,7 @@ namespace GmailFetcherAndDiscordForwarder
             }
             else if (isVersionRequest)
             {
-                output = "v. 0.1";
+                output = "v. 1.0";
             }
             else
             {
