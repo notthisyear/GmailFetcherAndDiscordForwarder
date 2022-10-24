@@ -6,7 +6,7 @@ To run the program, a Gmail account where the Google Drive API is enabled is req
 Next, a webhook must be created at the desired Discord server. Follow the steps [at this link](https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks) to set it up. Note the `Webhook URL`.
 
 ## Running the program
-To run the program, simple clone this repository and build it with `dotnet build`. The build command should restore the required NuGet packages automatically. `dotnet` might decide to regenerate the existing `AssemblyInfo.cs` file, which can cause the build to fail as the test project accesses internal members. If that happens, try restoring the `AssemblyInfo.cs` file (`git restore AssemblyInfo.cs`) and run `dotnet build` again.
+To run the program, simple clone this repository and build it with `dotnet build`. The build command should restore the required NuGet packages automatically.
 
 Typical usage:
 
