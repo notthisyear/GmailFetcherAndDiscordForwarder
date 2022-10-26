@@ -4,9 +4,12 @@ using System.Linq;
 using System.Net.Mail;
 using System.Threading.Tasks;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using CommandLine;
 using CommandLine.Text;
 using GmailFetcherAndDiscordForwarder.Common;
+
+[assembly: InternalsVisibleTo("GmailFetcherAndDiscordForwarderTests")]
 
 namespace GmailFetcherAndDiscordForwarder
 {
