@@ -26,4 +26,8 @@
     </None>
   </ItemGroup>
 
+    <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+      <Exec Command="git describe --long --dirty --always > $(OutputPath)git_status.txt" IgnoreExitCode="true"/>
+    </Target>
+
 </Project>

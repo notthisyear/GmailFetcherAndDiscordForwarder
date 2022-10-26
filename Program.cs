@@ -2,6 +2,7 @@
 using System.IO;
 using System.Linq;
 using System.Net.Mail;
+using System.Reflection;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
@@ -17,7 +18,10 @@ namespace GmailFetcherAndDiscordForwarder
     {
         private const string HelpHeading = "GmailFetcherAndDiscordForwarder - Fetches e-mails from a Google Mail account";
         private const string HelpCopyright = "Copyright (C) 2022 Calle Lindquist";
+        private const string GitStatusFileName = "git_status.txt"; // See post-build event
 
+        private static GitInformation? s_gitInformation;
+        private static string? s_assemblyName;
         public static void Main(string[] args)
         {
             Parser parser = new(x =>
@@ -27,9 +31,33 @@ namespace GmailFetcherAndDiscordForwarder
                 x.AutoVersion = true;
             });
 
+            s_assemblyName = Assembly.GetExecutingAssembly().GetName().Name ?? "[COULD NOT GET ASSEMBLY NAME]";
+            if (TrySetGitInformation())
+            {
+                Console.Title = $"{s_assemblyName} | {s_gitInformation!} | started at {DateTime.Now:yyyy-MM-dd HH:mm:ss}";
+            }
+            else
+            {
+                Console.Title = $"{s_assemblyName} | started at {DateTime.Now:yyyy-MM-dd HH:mm:ss}";
+                LoggerType.Internal.Log(LoggingLevel.Debug, "Could not find git version file - is git installed?");
+            }
+
             var result = parser.ParseArguments<GmailFetcherAndDiscordForwarderArguments>(args);
             result.WithParsed(RunProgram)
                   .WithNotParsed(err => RunErrorFlow(result, err));
+        }
+
+        private static bool TrySetGitInformation()
+        {
+            var gitStatusFilePath = Path.Combine(AppContext.BaseDirectory, GitStatusFileName);
+            if (File.Exists(gitStatusFilePath))
+            {
+                string gitStatusRaw = File.ReadAllText(gitStatusFilePath);
+                if (GitInformation.TryParseGitInformation(gitStatusRaw, out GitInformation? gitInformation))
+                    s_gitInformation = gitInformation;
+            }
+
+            return s_gitInformation != default;
         }
 
         private static void RunProgram(GmailFetcherAndDiscordForwarderArguments args)
@@ -58,7 +86,7 @@ namespace GmailFetcherAndDiscordForwarder
             var tcs = new TaskCompletionSource();
             Task.Run(async () =>
             {
-                await EntryPoint.StartProgram(args);
+                await EntryPoint.StartProgram(s_assemblyName!, args);
                 tcs.SetResult();
             }).ConfigureAwait(false);
 
@@ -84,7 +112,7 @@ namespace GmailFetcherAndDiscordForwarder
             }
             else if (isVersionRequest)
             {
-                output = "v. 1.0";
+                output = s_gitInformation == default ? "<could not read version info>" : s_gitInformation.ToString();
             }
             else
             {

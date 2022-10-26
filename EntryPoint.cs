@@ -11,12 +11,11 @@ namespace GmailFetcherAndDiscordForwarder
 {
     internal class EntryPoint
     {
-        private const string ServiceName = "GmailFetcherAndDiscordForwarder";
         private static readonly CancellationTokenSource s_cts = new();
 
-        public static async Task StartProgram(GmailFetcherAndDiscordForwarderArguments arguments)
+        public static async Task StartProgram(string applicationName, GmailFetcherAndDiscordForwarderArguments arguments)
         {
-            LoggerType.Internal.Log(LoggingLevel.Info, $"{ServiceName} started, targeting account '{arguments.EmailAddress}'");
+            LoggerType.Internal.Log(LoggingLevel.Info, $"{applicationName} started, targeting account '{arguments.EmailAddress}'");
 
             var accountName = arguments.EmailAddress!.Split('@')[0];
             if (string.IsNullOrEmpty(accountName))
@@ -25,7 +24,7 @@ namespace GmailFetcherAndDiscordForwarder
 
             using var mailClient = new GmailClient(accountName, arguments.EmailAddress, arguments.CredentialsPath!);
             LoggerType.Internal.Log(LoggingLevel.Info, "Initializing Gmail service...");
-            await mailClient.Initialize(ServiceName);
+            await mailClient.Initialize(applicationName);
 
             if (string.IsNullOrEmpty(arguments.EmailsCachePath))
                 arguments.EmailsCachePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), $"{accountName}_email_cache.json");
