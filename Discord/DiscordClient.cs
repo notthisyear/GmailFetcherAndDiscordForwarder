@@ -243,18 +243,14 @@ namespace GmailFetcherAndDiscordForwarder.Discord
             int numberOfPostsRemaining = numberOfPosts;
             int indexInContent = 0;
 
-            // Each post will typically be somewhat shorter, as we search for a newline from the end
-            int currentPostMaxLength = Math.Min(MaxContentLengthPerPost, (int)(totalLength / (double)numberOfPosts));
-            int remainingLength = totalLength;
+            int currentPostMaxLength = Math.Min(MaxContentLengthPerPost, (int)(content.Length / (double)numberOfPosts));
+            int remainingLength = content.Length;
 
             while (numberOfPostsRemaining > 0)
             {
-                if (isMultiPost)
-                {
-                    string currentPostInfo = $"({numberOfPosts - numberOfPostsRemaining + 1}/{numberOfPosts})";
-                    sb.AppendLine(currentPostInfo);
-                    currentPostMaxLength -= currentPostInfo.Length;
-                }
+                string currentPostInfo = $"({numberOfPosts - numberOfPostsRemaining + 1}/{numberOfPosts})";
+                sb.AppendLine(currentPostInfo);
+                currentPostMaxLength -= currentPostInfo.Length;
 
                 string currentContentSlice = GetContentSlice(content, currentPostMaxLength, ref indexInContent);
                 sb.Append(currentContentSlice);
@@ -268,6 +264,16 @@ namespace GmailFetcherAndDiscordForwarder.Discord
                     Math.Min(MaxContentLengthPerPost, (int)(remainingLength / (double)numberOfPostsRemaining));
 
                 sb.Clear();
+            }
+
+            // Each post will typically be somewhat shorter than the specified max, as we search for a newline (or blankspace) from the end and towards the start.
+            // Hence, we could find that the remaining content when we get to the last post is a few characters longer than the allowed max.
+            // In that instance, we simply add the last piece of content as an extra post
+            if (indexInContent < content.Length - 1)
+            {
+                sb.AppendLine($"(extra post #{numberOfPosts + 1})");
+                sb.Append(content[indexInContent..]);
+                result.Add(sb.ToString());
             }
 
             return result;
