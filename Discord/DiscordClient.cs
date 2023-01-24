@@ -293,7 +293,7 @@ namespace GmailFetcherAndDiscordForwarder.Discord
         {
             StringBuilder sb = new();
             sb.Append("first e-mail received at".AddMarkdownEmphasis(Emphasis.Italic, addSpaceAfter: true));
-            sb.Append($"{emailDate:yyyy-MM-dd HH:mm:ss}".AddMarkdownEmphasis(Emphasis.Bold, addSpaceAfter: false));
+            sb.Append($"{emailDate:yyyy-MM-dd HH:mm:ss}".AddMarkdownEmphasis(Emphasis.Bold, addSpaceAfter: true));
             sb.Append(", thread created at".AddMarkdownEmphasis(Emphasis.Italic, addSpaceAfter: true));
             sb.Append($"{DateTime.Now:yyyy-MM-dd HH:mm:ss}".AddMarkdownEmphasis(Emphasis.Bold));
             return sb.ToString();
