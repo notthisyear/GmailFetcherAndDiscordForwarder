@@ -60,7 +60,7 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
         public string? InReplyTo { get; }
         #endregion
 
-        private static readonly Regex s_filterKnownDateVariants = new(@"((\(UTC\))|(\(GMT\))|(\(PDT\))|(\(CEST\)))", RegexOptions.Compiled);
+        private static readonly Regex s_filterKnownDateVariants = new(@"((\(UTC\))|(\(GMT\))|(\(PDT\))|(\(CEST\))|(\(CET\)))", RegexOptions.Compiled);
 
         [JsonProperty]
         private readonly List<(MimeType type, string value)> _content;

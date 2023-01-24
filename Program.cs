@@ -17,7 +17,7 @@ namespace GmailFetcherAndDiscordForwarder
     public class Program
     {
         private const string HelpHeading = "GmailFetcherAndDiscordForwarder - Fetches e-mails from a Google Mail account";
-        private const string HelpCopyright = "Copyright (C) 2022 Calle Lindquist";
+        private const string HelpCopyright = "Copyright (C) 2022 - 2023 Calle Lindquist";
         private const string GitStatusFileName = "git_status.txt"; // See post-build event
 
         private static GitInformation? s_gitInformation;

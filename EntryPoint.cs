@@ -105,6 +105,12 @@ namespace GmailFetcherAndDiscordForwarder
 
                 if (newEmails.Any())
                 {
+                    if (!newEmails.Where(x => x.IsValid).Any())
+                    {
+                        LoggerType.GoogleCommunication.Log(LoggingLevel.Warning, "No new valid e-mails found");
+                        continue;
+                    }
+
                     mailManager.ProcessNewEmails(newEmails);
                     cacheManager.AddToCache(newEmails);
                     cacheManager.FlushEmailCacheToDisk();
