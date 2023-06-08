@@ -129,7 +129,7 @@ namespace GmailFetcherAndDiscordForwarder
             {
                 MissingValueOptionError missingValueError => $"Value for argument '{missingValueError.NameInfo.NameText}' is missing",
                 UnknownOptionError unknownOptionError => $"Argument '{unknownOptionError.Token}' is unknown",
-                MissingRequiredOptionError _ => $"A required option is missing value",
+                MissingRequiredOptionError missingRequiredOption => $"A required option ('{missingRequiredOption.NameInfo.LongName}') is missing value",
                 SetValueExceptionError setValueExceptionError => $"Could not set value for argument '{setValueExceptionError.NameInfo.NameText}': {setValueExceptionError.Exception.Message}",
                 BadFormatConversionError badFormatConversionError => $"Argument '{badFormatConversionError.NameInfo.NameText}' has bad format",
                 _ => $"Argument parsing failed: '{error.Tag}'"
