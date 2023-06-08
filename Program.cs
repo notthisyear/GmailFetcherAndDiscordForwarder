@@ -22,6 +22,7 @@ namespace GmailFetcherAndDiscordForwarder
 
         private static GitInformation? s_gitInformation;
         private static string? s_assemblyName;
+
         public static void Main(string[] args)
         {
             Parser parser = new(x =>

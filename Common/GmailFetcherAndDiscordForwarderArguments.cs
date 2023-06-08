@@ -11,7 +11,7 @@ namespace GmailFetcherAndDiscordForwarder.Common
         [Option(longName: "email-address", Required = true, HelpText = "The Google e-mail address to target")]
         public string? EmailAddress { get; set; }
 
-        [Option(longName: "discord-webhook-url", HelpText = "A Discord webhook URI to sent emails to (not required if --only-build-email-cache is set")]
+        [Option(longName: "discord-webhook-url", HelpText = "A Discord webhook URI to sent emails to (not required if --only-build-email-cache is set)")]
         public string? DiscordWebhookUrl { get; set; }
 
         [Option(longName: "fetching-interval", Default = 5, HelpText = "The interval with which to check the account for new e-mails (in minutes)")]
