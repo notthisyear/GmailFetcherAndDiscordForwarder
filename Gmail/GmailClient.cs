@@ -231,12 +231,16 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
                     }
 
                     if (emailListResponse == null || emailListResponse.Messages == null)
-                        return (default, new InvalidGmailResponseException("Email listing return null"));
-
-                    foreach (Message? messages in emailListResponse.Messages)
-                        result.Add(messages.Id);
-
-                    pageToken = emailListResponse.NextPageToken;
+                    {
+                        if (!result.Any())
+                            return (default, new InvalidGmailResponseException("Email listing returned null"));
+                    }
+                    else
+                    {
+                        foreach (Message? messages in emailListResponse.Messages)
+                            result.Add(messages.Id);
+                    }
+                    pageToken = emailListResponse?.NextPageToken ?? string.Empty;
 
                 } while (!string.IsNullOrEmpty(pageToken));
                 return (result, default);
