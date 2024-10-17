@@ -49,7 +49,12 @@ namespace GmailFetcherAndDiscordForwarder.Discord
 
         // Discord has a 2000 character limit for the content field
         private const int MaxContentLengthPerPost = 2000;
+
+        // Discord has a 80 character limit for the thread name
+        private const int MaxThreadNameLength = 80;
+
         private const int TimeBetweenAttemptsMs = 2000;
+
         private const int NumberOfMaxAttempts = 10;
         #endregion
 
@@ -94,7 +99,9 @@ namespace GmailFetcherAndDiscordForwarder.Discord
 
             ExecuteWebhookParams webHookParams = new()
             {
-                ThreadName = $"{email.Subject} ({email.Date:yyyy-MM-dd})".SanitizeThreadNameForDiscord(),
+                ThreadName = $"{email.Subject
+                .SanitizeThreadNameForDiscord()
+                .Shorten(MaxThreadNameLength - 12)} ({email.Date:yyyy-MM-dd})",
                 Content = GetFirstPostContent(email.Date)
             };
 

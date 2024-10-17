@@ -33,7 +33,22 @@ namespace GmailFetcherAndDiscordForwarder.Common
             => $"{type.ToString().ToLower()}";
 
         public static string SanitizeThreadNameForDiscord(this string s)
-            => s.Replace("@", "").Replace("#", "").Replace("\"", "").Replace("/", "").Replace("\\", "").Replace("<", "").Replace(">", "").Replace(':', ';');
+            => s.Replace("@", "")
+            .Replace("#", "")
+            .Replace("\"", "")
+            .Replace("/", "")
+            .Replace("\\", "")
+            .Replace("<", "")
+            .Replace(">", "")
+            .Replace(':', ';');
+
+        public static string Shorten(this string s, int maxLength, bool addEllipsis = true)
+        {
+            if (s.Length < maxLength)
+                return s;
+
+            return addEllipsis ? $"{s[0..(maxLength - 3)]}..." : s[0..maxLength];
+        }
 
         public static string AddMarkdownEmphasis(this string s, Emphasis emphasis, bool addSpaceAfter = false)
            => emphasis switch
