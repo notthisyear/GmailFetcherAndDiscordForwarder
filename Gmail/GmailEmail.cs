@@ -109,6 +109,8 @@ namespace GmailFetcherAndDiscordForwarder.Gmail
             if (string.IsNullOrEmpty(from))
                 return new(type);
 
+            // Note: Here, "to" can be null if the the e-mail was sent to many receivers.
+            // TODO: Figure out how to deal with that.
             if (string.IsNullOrEmpty(to) && type == MailType.Sent)
                 return new(type);
 

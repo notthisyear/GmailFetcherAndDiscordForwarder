@@ -84,7 +84,12 @@ namespace GmailFetcherAndDiscordForwarder
 
         public void AddToCache(List<GmailEmail> newEmails)
         {
-            newEmails.ForEach(x => _emails!.Add(x));
+            foreach (var email in newEmails)
+            {
+                if (!email.IsValid || email.Date == DateTime.MinValue)
+                    continue;
+                _emails!.Add(email);
+            }
         }
 
         public void AddToCache(string messageId, string threadId)
